@@ -4,7 +4,7 @@ export const painSignals = sqliteTable(
   'pain_signals',
   {
     id: text('id').primaryKey(),
-    /** Ingest origin: reddit | job_rss | hackernews | twitter | github_issue | google_dork | … */
+    /** Ingest origin: reddit | hackernews | twitter | github_issue | google_dork | … (legacy rows may still say job_rss) */
     source: text('source').notNull(),
     sourceUrl: text('source_url').notNull(),
     title: text('title'),

@@ -12,6 +12,7 @@
     "db:studio": "drizzle-kit studio",
     "ingest": "tsx scripts/ingest-signals.ts",
     "ingest:dorks": "tsx scripts/ingest-dorks.ts",
+    "db:purge-job-rss": "tsx scripts/purge-job-rss.ts",
     "scrutinize": "tsx scripts/scrutinize.ts"
   },
   "dependencies": {

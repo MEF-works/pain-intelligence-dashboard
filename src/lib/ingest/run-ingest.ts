@@ -12,10 +12,6 @@ import { painSignals } from '../db/schema';
 
 const USER_AGENT = 'PainIntelDashboard/1.0 (local research)';
 
-/** Remote OK / job-board RSS — off by default (hiring posts ≠ operator swoop opportunities). Set JOB_RSS_ENABLED=true to enable. */
-const JOB_RSS_URL =
-  process.env.JOB_RSS_URL ?? 'https://remoteok.com/remote-jobs.rss';
-
 /** Default X/Twitter recent-search queries (OR groups); override via TWITTER_SEARCH_QUERIES split by |||| */
 const DEFAULT_TWITTER_QUERIES = [
   '("checkout broken" OR "stripe issues" OR "payment failed") lang:en',
@@ -132,24 +128,6 @@ export async function capturePainSignal(opts: {
   return { ok: true, hot };
 }
 
-/** Minimal RSS 2.0 item parse (no extra deps). */
-function parseRssItems(xml: string): { title: string; link: string; content: string }[] {
-  const out: { title: string; link: string; content: string }[] = [];
-  const parts = xml.split(/<item>/i).slice(1);
-  for (const part of parts) {
-    const block = part.split(/<\/item>/i)[0] ?? '';
-    const titleM = block.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-    const linkM = block.match(/<link[^>]*>([\s\S]*?)<\/link>/i);
-    const descM = block.match(/<description[^>]*>([\s\S]*?)<\/description>/i);
-    const title = titleM ? plainTextFromHtmlish(titleM[1] ?? '') : '';
-    const link = linkM ? plainTextFromHtmlish(linkM[1] ?? '') : '';
-    if (!title || !link) continue;
-    const desc = descM ? plainTextFromHtmlish(descM[1] ?? '') : '';
-    out.push({ title, link, content: `${title}\n\n${desc}` });
-  }
-  return out;
-}
-
 export async function fetchRedditPain(subreddit: string): Promise<boolean> {
   const response = await fetch(
     `https://www.reddit.com/r/${subreddit}/new.json?limit=25`,
@@ -189,38 +167,6 @@ export async function fetchRedditPain(subreddit: string): Promise<boolean> {
       content,
       focusAreaId: area.id,
       createdAt: new Date(createdUtc * 1000),
-    });
-    if (r.hot) hot = true;
-  }
-  return hot;
-}
-
-export async function fetchJobRss(): Promise<boolean> {
-  if (!JOB_RSS_URL) {
-    console.log('[ingest] JOB_RSS_URL empty, skipping RSS');
-    return false;
-  }
-  const response = await fetch(JOB_RSS_URL, { headers: { 'User-Agent': USER_AGENT } });
-  if (!response.ok) {
-    console.warn(`[ingest] RSS ${response.status}`);
-    return false;
-  }
-  const xml = await response.text();
-  const items = parseRssItems(xml);
-  let hot = false;
-  for (const it of items) {
-    const fullText = it.content;
-    const area = firstMatchingFocus(fullText);
-    if (!area) continue;
-    const id = `rss:${hashContent(it.link)}`.slice(0, 200);
-    const r = await capturePainSignal({
-      id,
-      source: 'job_rss',
-      sourceUrl: it.link,
-      title: it.title,
-      content: fullText.slice(0, 20000),
-      focusAreaId: area.id,
-      createdAt: new Date(),
     });
     if (r.hot) hot = true;
   }
@@ -417,12 +363,6 @@ export async function runIngest(): Promise<void> {
   for (const sub of DEFAULT_SUBS) {
     const h = await fetchRedditPain(sub);
     if (h) anyHot = true;
-  }
-
-  if (process.env.JOB_RSS_ENABLED === 'true') {
-    if (await fetchJobRss()) anyHot = true;
-  } else {
-    console.log('[ingest] Job RSS skipped (set JOB_RSS_ENABLED=true to ingest JOB_RSS_URL)');
   }
 
   if (await fetchHackerNewsPain()) anyHot = true;

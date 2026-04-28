@@ -2,7 +2,7 @@
 
 **Canonical documentation:** [`PROJECT_SOURCE_OF_TRUTH.md`](./PROJECT_SOURCE_OF_TRUTH.md) — architecture, APIs, ingest, deployment; update it when the system changes.
 
-Sovereign signal intel: SQLite + Drizzle, Reddit + RSS ingest, pipeline stats (status + source counts), focus filters, Gemini outreach, CSV export, and a Refresh control to reload from the DB.
+Sovereign signal intel: SQLite + Drizzle, multi-source ingest (Reddit, HN, optional Twitter/GitHub, Serper dorks), pipeline stats (status + source counts), focus filters, Gemini outreach, CSV export, and a Refresh control to reload from the DB.
 
 ## Run locally
 

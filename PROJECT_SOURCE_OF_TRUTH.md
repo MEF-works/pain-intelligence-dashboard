@@ -39,8 +39,8 @@
 | `src/lib/db/` | Drizzle schema (`schema.ts`), DB singleton (`index.ts`) |
 | `src/lib/ingest/` | `run-ingest.ts` — multi-source ingest, hashing, intensity + Action Engine |
 | `src/lib/action-engine/` | `opportunity.ts` — heuristics, monetization intensity tweak, optional Gemini refinement |
-| `src/lib/html/` | `plain-text.ts` — HTML entity decode + tag strip for readable RSS/body text |
-| `scripts/` | `ingest-signals.ts`, `scrutinize.ts` (host/cron); prod ingest usually via HTTP |
+| `src/lib/html/` | `plain-text.ts` — HTML entity decode + tag strip for readable body text |
+| `scripts/` | `ingest-signals.ts`, `ingest-dorks.ts`, `purge-job-rss.ts`, `scrutinize.ts` (host/cron); prod ingest usually via HTTP |
 | `public/` | Static assets (e.g. `favicon.ico`) |
 | `drizzle.config.ts` | Drizzle Kit config (defaults to `./data/pain.db`) |
 | `Dockerfile` | Multi-stage Node 20 build → Next standalone runner |
@@ -54,7 +54,7 @@ Defined in `src/lib/db/schema.ts`. Apply schema changes with **`npm run db:push`
 | Column | Type | Notes |
 |--------|------|--------|
 | `id` | text PK | Reddit `name` or `rss:…` derived id |
-| `source` | text | e.g. `reddit`, `job_rss` |
+| `source` | text | e.g. `reddit`, `hackernews`, `google_dork` (legacy rows may still say `job_rss`) |
 | `source_url` | text | Canonical link |
 | `title` | text | Nullable |
 | `content` | text | Body used for display + outreach |
@@ -85,8 +85,7 @@ Copy from `.env.example`. Production Compose **overrides** `DATABASE_PATH` for t
 | `GEMINI_API_KEY` | For outreach | Used by `POST /api/outreach` / `generateTargetedBridge` |
 | `DATABASE_PATH` | Recommended | Host/scripts: default `./data/pain.db`. **Container:** forced to `/app/data/pain.db` in `docker-compose.yml` |
 | `CRON_SECRET` | Strongly recommended in prod | If set, `GET /api/cron/ingest` requires `Authorization: Bearer <same value>` |
-| `JOB_RSS_URL` | Optional | Only used when job RSS is enabled (see below). Default URL is Remote OK in code. |
-| `JOB_RSS_ENABLED` | Optional | **`true`** enables job-board RSS ingest; **default / omitted = off** (operator swoop use case, not hiring feeds). |
+| `SERPER_API_KEY` | For `npm run ingest:dorks` | Serper.dev Google Search API (stores `google_dork` signals) |
 | `TWITTER_BEARER_TOKEN` | Optional | Enables X/Twitter recent search ingest |
 | `TWITTER_SEARCH_QUERIES` | Optional | Queries separated by `\|\|\|\|` (four pipes). Defaults in `run-ingest.ts` |
 | `GITHUB_TOKEN` | Optional | Higher GitHub Search API rate limits for issue ingest |
@@ -126,7 +125,7 @@ Entry: `runIngest()` in `src/lib/ingest/run-ingest.ts` (also invoked by `GET /ap
 | Source | `source` value | Notes |
 |--------|----------------|--------|
 | Reddit | `reddit` | `/r/{sub}/new.json?limit=25`; subs include **saas**, **webdev**, **uxdesign**, plus ecommerce/shopify/**wordpress**, **woocommerce**, **elementor**/smallbusiness/entrepreneur/startups/dropshipping/roastmystore |
-| Remote OK RSS | `job_rss` | Only when **`JOB_RSS_ENABLED=true`** (default: skipped) |
+| Serper (scripts) | `google_dork` | **`npm run ingest:dorks`** — queries in `lib/constants/dorks.ts`; requires **`SERPER_API_KEY`** |
 | Hacker News | `hackernews` | Firebase `newstories` + item JSON; link or `item?id=` |
 | X / Twitter | `twitter` | Requires `TWITTER_BEARER_TOKEN`; recent search (default queries OR override env) |
 | GitHub issues | `github_issue` | GitHub Search API; optional `GITHUB_TOKEN` |
@@ -248,6 +247,7 @@ Append dated entries when shipping meaningful changes:
 | Date | Summary |
 |------|---------|
 | 2026-04-28 | Action Engine columns; monetization intensity; multi-source ingest (HN, optional Twitter/GitHub); Top Actions UI; actionable filter; outreach uses structured fields; optional RSS disable via `JOB_RSS_ENABLED`. |
+| 2026-04-29 | Removed job-board RSS ingest entirely; `npm run db:purge-job-rss` deletes legacy `job_rss` rows; Serper dork ingest documented. |
 | *(add rows below)* | |
 
 ---

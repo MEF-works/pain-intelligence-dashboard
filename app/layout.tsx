@@ -15,7 +15,7 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: 'Pain Intel | Sovereign signal pipeline',
   description:
-    'SQLite-backed pain signals from Reddit + job RSS: focus filters, Gemini outreach bridges, CSV export, pipeline status.',
+    'SQLite-backed pain signals from Reddit, HN, GitHub, Serper dorks, and more: focus filters, Gemini outreach bridges, CSV export, pipeline status.',
 };
 
 export default function RootLayout({children}: {children: React.ReactNode}) {
