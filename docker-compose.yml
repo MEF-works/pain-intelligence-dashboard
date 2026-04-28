@@ -1,0 +1,52 @@
+# Traefik v3 + Let’s Encrypt. App: https://signal.mgmalkz.com
+# DNS: A/AAAA for signal.mgmalkz.com → this VM. Open 80 + 443.
+
+services:
+  traefik:
+    image: traefik:v3
+    command:
+      - --api.dashboard=false
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.endpoint=unix:///var/run/docker.sock
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.le.acme.email=${LETSENCRYPT_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.le.acme.httpchallenge=true
+      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_letsencrypt:/letsencrypt
+    restart: unless-stopped
+
+  pain-intel:
+    build: .
+    image: pain-intel:latest
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DATABASE_PATH: /app/data/pain.db
+    volumes:
+      - pain_data:/app/data
+    labels:
+      - traefik.enable=true
+      - "traefik.http.routers.pain-intel.rule=Host(`signal.mgmalkz.com`)"
+      - traefik.http.routers.pain-intel.entrypoints=websecure
+      - traefik.http.routers.pain-intel.tls.certresolver=le
+      - traefik.http.services.pain-intel.loadbalancer.server.port=3000
+      - "traefik.http.routers.pain-intel-web.rule=Host(`signal.mgmalkz.com`)"
+      - traefik.http.routers.pain-intel-web.entrypoints=web
+      - traefik.http.routers.pain-intel-web.middlewares=signal-redirect-https
+      - traefik.http.middlewares.signal-redirect-https.redirectscheme.scheme=https
+    restart: unless-stopped
+    depends_on:
+      - traefik
+
+volumes:
+  traefik_letsencrypt:
+  pain_data:

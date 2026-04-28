@@ -1,0 +1,16 @@
+node_modules
+.next
+.git
+data/*.db
+data/*.db-*
+data/*.db-wal
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+coverage
+.cursor
+**/*.md
+!README.md
+real-market-pain

@@ -1,0 +1,6 @@
+{
+  "name": "Pain Intelligence Dashboard",
+  "description": "SQLite-backed pain signals, ingest, focus filters, Gemini outreach, pipeline metrics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
