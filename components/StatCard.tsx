@@ -10,11 +10,18 @@ interface StatCardProps {
   trend?: string;
   trendDirection?: 'up' | 'down';
   icon: React.ReactNode;
+  /** Optional panel tint (e.g. per-metric accent on dashboard). */
+  className?: string;
 }
 
-export function StatCard({ label, value, trend, trendDirection, icon }: StatCardProps) {
+export function StatCard({ label, value, trend, trendDirection, icon, className }: StatCardProps) {
   return (
-    <div className="bg-[#0F0F0F] p-3 rounded border border-zinc-800 flex flex-col gap-1 relative overflow-hidden group">
+    <div
+      className={cn(
+        'bg-[#0F0F0F] p-3 rounded border border-zinc-800/90 flex flex-col gap-1 relative overflow-hidden group shadow-sm shadow-black/30',
+        className
+      )}
+    >
       <div className="flex justify-between items-start relative z-10">
         <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-widest leading-none">
           {label}

@@ -2,9 +2,9 @@
 
 import * as React from 'react';
 import { motion } from 'motion/react';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { FOCUS_AREAS } from '@/lib/constants/focus-areas';
 import type { FeedSignal } from '@/lib/types';
+import { DashboardSnapshot } from '@/components/DashboardSnapshot';
 import { SignalFeed } from '@/components/SignalFeed';
 import { TopActions } from '@/components/TopActions';
 import { StatCard } from '@/components/StatCard';
@@ -261,24 +261,29 @@ export default function Dashboard() {
       <div className="max-w-[1800px] mx-auto space-y-6 relative z-10">
         <TopActions signals={killShotSignals} />
 
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
-          <div className="space-y-4">
-            <h2 className="text-[11px] font-mono uppercase text-zinc-500 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#FF3E3E] animate-pulse" />
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-5 xl:gap-6">
+          <div className="rounded-xl border border-zinc-800/80 bg-gradient-to-b from-[#101014] to-[#08080a] p-4 shadow-lg shadow-black/40 space-y-4">
+            <h2 className="text-[11px] font-mono uppercase text-emerald-400/90 flex items-center gap-2 tracking-widest">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(52,211,153,0.45)]" />
               Counts
             </h2>
-            <div className="grid grid-cols-2 gap-3">
+            <p className="text-[9px] font-mono text-zinc-600 leading-relaxed -mt-2">
+              Numbers for the current filter (except total + last row = full DB).
+            </p>
+            <div className="grid grid-cols-2 gap-2.5">
               <StatCard
                 label="Total signals"
                 value={loading ? '…' : String(stats?.total ?? 0)}
                 trend="db"
                 icon={<Activity size={18} />}
+                className="border-emerald-900/40 bg-emerald-950/10"
               />
               <StatCard
                 label="Filtered"
                 value={String(filteredSignals.length)}
                 trend="view"
                 icon={<Target size={18} />}
+                className="border-sky-900/40 bg-sky-950/10"
               />
               <StatCard
                 label="Avg intensity"
@@ -292,104 +297,105 @@ export default function Dashboard() {
                 }
                 trend="live"
                 icon={<Zap size={18} />}
+                className="border-amber-900/35 bg-amber-950/10"
               />
               <StatCard
                 label="Last row time"
                 value={stats?.lastSignalAt ? new Date(stats.lastSignalAt).toLocaleString() : '—'}
                 icon={<Clock size={18} />}
+                className="border-zinc-700/50 bg-zinc-900/30"
               />
             </div>
-            <div className="bg-[#1A0A0A] border border-[#FF3E3E]/20 p-4 rounded">
-              <div className="flex items-center gap-2 text-[#FF3E3E] mb-2">
+            <div className="rounded-lg border border-amber-500/25 bg-gradient-to-br from-amber-950/25 to-zinc-950/80 p-3.5">
+              <div className="flex items-center gap-2 text-amber-400/95 mb-2">
                 <ShieldAlert size={14} />
-                <span className="text-[10px] font-mono font-bold uppercase">Sync</span>
+                <span className="text-[10px] font-mono font-bold uppercase tracking-wide">Sync</span>
               </div>
-              <p className="text-xs text-zinc-400">
-                Ingest → SQLite (<code className="text-zinc-500">DATABASE_PATH</code> or ./data/pain.db).
-                <br />
-                Last activity in table: {stats?.lastSignalAt ? new Date(stats.lastSignalAt).toISOString() : 'none'}.
+              <p className="text-[11px] text-zinc-400 leading-relaxed font-sans">
+                Data path: SQLite via <code className="text-amber-200/80 font-mono text-[10px]">DATABASE_PATH</code>{' '}
+                (default <code className="text-zinc-500 font-mono text-[10px]">./data/pain.db</code>).
+              </p>
+              <p className="text-[10px] font-mono text-zinc-500 mt-2 border-t border-zinc-800/60 pt-2">
+                Last row written:{' '}
+                <span className="text-zinc-300">
+                  {stats?.lastSignalAt ? new Date(stats.lastSignalAt).toISOString() : '—'}
+                </span>
               </p>
             </div>
           </div>
 
-          <div className="xl:col-span-2 space-y-2">
-            <h2 className="text-[11px] font-mono text-zinc-500 uppercase">Signals by focus (db)</h2>
-            <div className="h-[240px] w-full border border-zinc-800 rounded bg-[#0F0F0F] p-2">
-              {!loading && stats && stats.byFocus.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={stats.byFocus}
-                    layout="vertical"
-                    margin={{ top: 4, right: 8, left: 4, bottom: 0 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#222" horizontal={false} />
-                    <XAxis type="number" stroke="#666" fontSize={9} tickLine={false} allowDecimals={false} />
-                    <YAxis
-                      dataKey="focusArea"
-                      type="category"
-                      width={100}
-                      stroke="#666"
-                      fontSize={8}
-                      tickFormatter={(v) => String(v).slice(0, 14)}
-                    />
-                    <Tooltip
-                      contentStyle={{ background: '#0a0a0a', border: '1px solid #333', fontSize: 10 }}
-                    />
-                    <Bar dataKey="count" fill="#FF3E3E" radius={[0, 4, 4, 0]} maxBarSize={20} />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-full flex items-center justify-center text-[10px] font-mono text-zinc-600">
-                  {loading ? 'Loading…' : 'No rows to chart'}
-                </div>
-              )}
-            </div>
+          <div className="xl:col-span-2">
+            <DashboardSnapshot stats={stats} loading={loading} />
           </div>
 
-          <div className="text-[10px] font-mono text-zinc-400 space-y-2 p-3 border border-zinc-800 rounded bg-zinc-950/40">
-            <div className="text-[9px] uppercase tracking-widest text-zinc-600">Pipeline (db)</div>
-            <div className="space-y-1">
+          <aside className="rounded-xl border border-zinc-800/80 bg-gradient-to-b from-[#0e0e12] to-[#060608] p-4 shadow-lg shadow-black/40 flex flex-col gap-3">
+            <div className="text-[10px] font-mono uppercase tracking-widest text-indigo-400/90 border-b border-zinc-800/70 pb-2">
+              Pipeline (db)
+            </div>
+            <div className="rounded-md bg-zinc-950/60 border border-zinc-800/60 p-2.5 space-y-1.5">
+              <p className="text-[8px] font-mono uppercase tracking-wider text-zinc-600">Status</p>
               {(stats?.byStatus ?? []).map((row) => (
-                <div key={row.status} className="flex justify-between gap-2">
-                  <span className="text-zinc-500 truncate">{row.status}</span>
-                  <span className="text-zinc-200 tabular-nums">{row.count}</span>
+                <div key={row.status} className="flex justify-between gap-2 text-[11px]">
+                  <span className="text-zinc-400 truncate capitalize">{row.status}</span>
+                  <span className="text-zinc-100 font-mono tabular-nums font-semibold">{row.count}</span>
                 </div>
               ))}
               {!loading && stats && stats.byStatus.length === 0 && (
-                <span className="text-zinc-600">No rows yet — run ingest.</span>
+                <span className="text-zinc-600 text-[10px] font-mono">No rows yet — run ingest.</span>
               )}
             </div>
-            <div className="border-t border-zinc-800 pt-2 mt-2 flex justify-between gap-2 items-baseline">
-              <span className="text-[9px] uppercase tracking-widest text-zinc-600">High value leads</span>
-              <span className="text-zinc-100 font-mono tabular-nums text-sm" title="Intensity &gt; 85 (DB-wide)">
+            <div className="rounded-md border border-rose-500/20 bg-rose-950/15 px-2.5 py-2 flex justify-between items-baseline gap-2">
+              <span className="text-[9px] uppercase tracking-widest text-rose-300/80 font-mono">
+                High value
+                <br />
+                <span className="text-[8px] text-rose-200/50 normal-case">intensity &gt; 85</span>
+              </span>
+              <span className="text-xl font-mono font-bold text-rose-100 tabular-nums" title="DB-wide">
                 {loading ? '…' : String(stats?.highValueLeads ?? 0)}
               </span>
             </div>
-            <div className="border-t border-zinc-800 pt-2 mt-2 space-y-1">
-              <div className="text-[9px] uppercase tracking-widest text-zinc-600">Sources</div>
+            <div className="rounded-md bg-zinc-950/50 border border-zinc-800/60 p-2.5 space-y-1.5">
+              <p className="text-[8px] font-mono uppercase tracking-wider text-zinc-600">Sources (raw)</p>
               {(stats?.bySource ?? []).map((row) => (
-                <div key={row.source} className="flex justify-between gap-2">
-                  <span className="text-zinc-500 truncate">{row.source}</span>
-                  <span className="text-zinc-200 tabular-nums">{row.count}</span>
+                <div key={row.source} className="flex justify-between gap-2 text-[11px]">
+                  <span className="text-zinc-500 truncate font-mono">{row.source}</span>
+                  <span className="text-zinc-200 tabular-nums font-mono">{row.count}</span>
                 </div>
               ))}
             </div>
             {stats?.byFocus?.[0] && (
-              <div className="border-t border-zinc-800 pt-2 text-[9px] text-zinc-500">
-                Top focus:{' '}
-                <span className="text-[#FF3E99]">{stats.byFocus[0].focusArea}</span> ({stats.byFocus[0].count})
+              <div className="text-[10px] font-mono text-zinc-500 rounded-md bg-black/30 border border-zinc-800/50 px-2 py-1.5">
+                Dominant bucket:{' '}
+                <span className="text-fuchsia-300/90">
+                  {Object.values(FOCUS_AREAS).find((a) => a.id === stats.byFocus[0].focusArea)?.label ??
+                    stats.byFocus[0].focusArea}
+                </span>{' '}
+                <span className="text-zinc-400">({stats.byFocus[0].count})</span>
               </div>
             )}
-            <div className="border-t border-zinc-800 pt-2 text-[9px] text-zinc-600 leading-relaxed">
-              Outreach needs <code className="text-zinc-500">GEMINI_API_KEY</code>. Cron ingest needs{' '}
-              <code className="text-zinc-500">CRON_SECRET</code> +{' '}
-              <code className="text-zinc-500">Authorization: Bearer …</code> on{' '}
-              <code className="text-zinc-500">/api/cron/ingest</code> or{' '}
-              <code className="text-zinc-500">/api/cron/ingest-dorks</code> (Docker DB). Host:{' '}
-              <code className="text-zinc-500">npm run ingest</code> /{' '}
-              <code className="text-zinc-500">npm run ingest:dorks</code>.
-            </div>
-          </div>
+            <details className="group rounded-md border border-zinc-800/70 bg-black/25 text-[9px] font-mono text-zinc-500 leading-relaxed">
+              <summary className="cursor-pointer list-none px-2 py-1.5 text-zinc-400 hover:text-zinc-300 flex items-center gap-1 [&::-webkit-details-marker]:hidden">
+                <span className="text-zinc-600 group-open:hidden">▸</span>
+                <span className="text-zinc-600 hidden group-open:inline">▾</span>
+                Env / cron setup
+              </summary>
+              <div className="px-2 pb-2 pt-0 border-t border-zinc-800/50 space-y-1">
+                <p>
+                  Outreach: <code className="text-zinc-400">GEMINI_API_KEY</code>
+                </p>
+                <p>
+                  Cron: <code className="text-zinc-400">CRON_SECRET</code> +{' '}
+                  <code className="text-zinc-400">Authorization: Bearer …</code> on{' '}
+                  <code className="text-zinc-400">/api/cron/ingest</code> or{' '}
+                  <code className="text-zinc-400">/api/cron/ingest-dorks</code> (Docker DB).
+                </p>
+                <p>
+                  Host scripts: <code className="text-zinc-400">npm run ingest</code>,{' '}
+                  <code className="text-zinc-400">npm run ingest:dorks</code>
+                </p>
+              </div>
+            </details>
+          </aside>
         </div>
 
         <motion.div
