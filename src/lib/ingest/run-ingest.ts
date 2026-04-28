@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import { eq } from 'drizzle-orm';
 import { FOCUS_AREAS } from '../../../lib/constants/focus-areas';
+import { plainTextFromHtmlish } from '../html/plain-text';
 import { db } from '../db';
 import { painSignals } from '../db/schema';
 
@@ -65,23 +66,16 @@ async function hashExists(hash: string): Promise<boolean> {
 /** Minimal RSS 2.0 item parse (no extra deps). */
 function parseRssItems(xml: string): { title: string; link: string; content: string }[] {
   const out: { title: string; link: string; content: string }[] = [];
-  const strip = (s: string) =>
-    s
-      .replace(/<!\[CDATA\[/g, '')
-      .replace(/\]\]>/g, '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
   const parts = xml.split(/<item>/i).slice(1);
   for (const part of parts) {
     const block = part.split(/<\/item>/i)[0] ?? '';
     const titleM = block.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
     const linkM = block.match(/<link[^>]*>([\s\S]*?)<\/link>/i);
     const descM = block.match(/<description[^>]*>([\s\S]*?)<\/description>/i);
-    const title = titleM ? strip(titleM[1] ?? '') : '';
-    const link = linkM ? strip(linkM[1] ?? '') : '';
+    const title = titleM ? plainTextFromHtmlish(titleM[1] ?? '') : '';
+    const link = linkM ? plainTextFromHtmlish(linkM[1] ?? '') : '';
     if (!title || !link) continue;
-    const desc = descM ? strip(descM[1] ?? '') : '';
+    const desc = descM ? plainTextFromHtmlish(descM[1] ?? '') : '';
     out.push({ title, link, content: `${title}\n\n${desc}` });
   }
   return out;
@@ -108,8 +102,8 @@ export async function fetchRedditPain(subreddit: string): Promise<boolean> {
   const children = data.data?.children ?? [];
   let hot = false;
   for (const { data: post } of children) {
-    const selftext = String(post.selftext ?? '');
-    const title = String(post.title ?? '');
+    const selftext = plainTextFromHtmlish(String(post.selftext ?? ''));
+    const title = plainTextFromHtmlish(String(post.title ?? ''));
     const fullText = `${title}\n\n${selftext}`.replace(/\n{3,}/g, '\n\n');
     const area = firstMatchingFocus(fullText);
     if (!area) continue;
@@ -202,7 +196,16 @@ async function ntfyAlert(message: string) {
   }
 }
 
-const DEFAULT_SUBS = ['ecommerce', 'shopify', 'wordpress'] as const;
+const DEFAULT_SUBS = [
+  'ecommerce',
+  'shopify',
+  'wordpress',
+  'smallbusiness',
+  'entrepreneur',
+  'startups',
+  'dropshipping',
+  'roastmystore',
+] as const;
 
 /**
  * Fetches public listings and upserts `pain_signals` (deduplicated by content hash).
