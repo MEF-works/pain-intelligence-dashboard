@@ -20,6 +20,9 @@ export function downloadSignalsCsv(rows: FeedSignal[]) {
     'opportunityAngle',
     'confidenceScore',
     'actionType',
+    'buyerScore',
+    'priority',
+    'identityJson',
     'createdAt',
   ]
   const esc = (s: string) => `"${String(s).replace(/"/g, '""')}"`
@@ -39,6 +42,9 @@ export function downloadSignalsCsv(rows: FeedSignal[]) {
         r.opportunityAngle ?? '',
         r.confidenceScore != null ? String(r.confidenceScore) : '',
         r.actionType ?? '',
+        String(r.buyerScore ?? 0),
+        r.priority ?? '',
+        r.identityJson ?? '',
         r.timestamp,
       ]
         .map(esc)

@@ -71,6 +71,9 @@ Defined in `src/lib/db/schema.ts`. Apply schema changes with **`npm run db:push`
 | `business_impact` | text | Revenue / risk / inefficiency framing |
 | `confidence_score` | real | 0–1 likelihood signal is actionable vs noise |
 | `action_type` | text | `direct_outreach` \| `research_deeper` \| `ignore` |
+| `buyer_score` | integer | Radar: first-person + business pain heuristics (0–20) |
+| `priority` | text | `high` \| `low` from buyer/problem context |
+| `identity_json` | text | JSON: `username`, `profile_url`, `platform`, `possible_business` |
 | `created_at` | timestamp | Required |
 | `last_updated` | timestamp | Set on PATCH status updates |
 
@@ -90,6 +93,8 @@ Copy from `.env.example`. Production Compose **overrides** `DATABASE_PATH` for t
 | `TWITTER_SEARCH_QUERIES` | Optional | Queries separated by `\|\|\|\|` (four pipes). Defaults in `run-ingest.ts` |
 | `GITHUB_TOKEN` | Optional | Higher GitHub Search API rate limits for issue ingest |
 | `GITHUB_ISSUES_QUERY` | Optional | Override GitHub issue search query |
+| `GITHUB_MIN_STARS` | Optional | Repo stargazer floor for GitHub issues (default **5000**; **`0`** disables) |
+| `REDDIT_SEARCH_QUERIES` | Optional | Override Reddit global search strings (`\|\|\|\|`-separated); defaults in `lib/constants/reddit-search-queries.ts` |
 | `ACTION_ENGINE_GEMINI` | Optional | Set `false` to skip Gemini refinement of Action fields (heuristics only) |
 | `NTFY_URL` | Optional | Push notification URL when ingest marks a run “hot” (intensity > 80) |
 | `LETSENCRYPT_EMAIL` | Docker + Traefik | ACME/Let’s Encrypt |
@@ -125,27 +130,31 @@ Entry: `runIngest()` in `src/lib/ingest/run-ingest.ts` (also invoked by `GET /ap
 
 | Source | `source` value | Notes |
 |--------|----------------|--------|
-| Reddit | `reddit` | `/r/{sub}/new.json?limit=25`; subs include **saas**, **webdev**, **uxdesign**, plus ecommerce/shopify/**wordpress**, **woocommerce**, **elementor**/smallbusiness/entrepreneur/startups/dropshipping/roastmystore |
+| Reddit | `reddit` | **Global search** `search.json` (first-person queries in `lib/constants/reddit-search-queries.ts`); override with **`REDDIT_SEARCH_QUERIES`** (`||||`-separated). Throttled between calls. |
 | Serper | `google_dork` | Queries in `lib/constants/dorks.ts`; requires **`SERPER_API_KEY`**. Prefer **`GET /api/cron/ingest-dorks`** in production (writes container SQLite). Host: **`npm run ingest:dorks`** (writes host `DATABASE_PATH` / `./data/pain.db`). |
 | Hacker News | `hackernews` | Firebase `newstories` + item JSON; link or `item?id=` |
 | X / Twitter | `twitter` | Requires `TWITTER_BEARER_TOKEN`; recent search (default queries OR override env) |
-| GitHub issues | `github_issue` | GitHub Search API; optional `GITHUB_TOKEN` |
+| GitHub issues | `github_issue` | Search API + **title** must match production/checkout/payment-style pain; repo **`GITHUB_MIN_STARS`** (default **5000**, set `0` to disable). Optional `GITHUB_TOKEN`. |
 
 **Not implemented in-repo** (need separate APIs / contracts): Product Hunt comments, status-page incident ingestion — add deliberately when keys and parsing rules are defined.
 
-### 7.2 Gate + dedup
+### 7.2 Radar (quality gate)
 
-- **Filter:** `firstMatchingFocus()` — text must hit [`lib/constants/focus-areas.ts`](./lib/constants/focus-areas.ts). First category in object order wins.
+All sources pass through [`src/lib/ingest/signal-filters.ts`](./src/lib/ingest/signal-filters.ts) inside `capturePainSignal` **after** hash-dedup checks: drop SEO/tutorial hosts (`isJunkUrl`), require **problem language** (`expressesProblem`), require **identity-capable platform** (Reddit/Twitter/GitHub/HN; Google dork only when URL looks like a real site outage, not publisher help). Reddit additionally requires **first-person** (`my` / `I` / `our`). **Buyer score** + **`priority`** (`high` \| `low`) and **`identity_json`** are persisted.
+
+### 7.3 Gate + dedup
+
+- **Focus:** `firstMatchingFocus()` — text must hit [`lib/constants/focus-areas.ts`](./lib/constants/focus-areas.ts). First category in object order wins.
 - **Dedup:** SHA-256 `content_hash` unique index.
 - **Noise:** Rows classified `ignore` with very low confidence may be **discarded** before insert (see `shouldDiscardSignal`).
 
-### 7.3 Scoring
+### 7.4 Scoring
 
 1. **`computeSemanticIntensity`** — base semantic score (keywords + length multiplier).
 2. **`adjustIntensityMonetization`** — boosts money/customers/scaling signals; penalizes vague tech-only noise.
 3. **Action Engine** (`buildOpportunityFields`): heuristics fill `pain_summary`, `likely_root_issue`, `opportunity_angle`, `business_impact`, `confidence_score`, `action_type`. If `GEMINI_API_KEY` is set and `ACTION_ENGINE_GEMINI` is not `false`, fields are **refined** with Gemini (`gemini-2.0-flash`).
 
-### 7.4 Alerts
+### 7.5 Alerts
 
 If any inserted signal has intensity **> 80**, optionally POST to `NTFY_URL`.
 
@@ -252,7 +261,8 @@ docker compose exec -T pain-intel python3 -c "import sqlite3; c=sqlite3.connect(
 |--------|--------|
 | **Schema** (`schema.ts`) | `npm run db:push` on each environment; restart app; document breaking changes here |
 | **Focus keywords** (`focus-areas.ts`) | Redeploy/rebuild; **existing rows unchanged** — new ingest picks up new rules |
-| **Reddit sub list** (`DEFAULT_SUBS`) | ecommerce, shopify, wordpress, **woocommerce**, **elementor**, smallbusiness, entrepreneur, startups, dropshipping, roastmystore, saas, webdev, uxdesign |
+| **Reddit search queries** (`REDDIT_SEARCH_QUERIES` / `lib/constants/reddit-search-queries.ts`) | First-person + pain phrases; edit list when tuning recall vs noise |
+| **GitHub floor** | `GITHUB_MIN_STARS` (default 5000; `0` disables star gate) |
 | **Env vars** | Update `.env.example` + this doc; restart containers |
 | **Docker hostname** | Edit Traefik labels in `docker-compose.yml` + DNS |
 | **API contract** | Update §6 and any consumer (dashboard fetch shapes) |
@@ -268,6 +278,7 @@ Append dated entries when shipping meaningful changes:
 | 2026-04-28 | Action Engine columns; monetization intensity; multi-source ingest (HN, optional Twitter/GitHub); Top Actions UI; actionable filter; outreach uses structured fields; optional RSS disable via `JOB_RSS_ENABLED`. |
 | 2026-04-29 | Removed job-board RSS ingest entirely; `npm run db:purge-job-rss` deletes legacy `job_rss` rows; Serper dork ingest documented. |
 | 2026-04-29 | `GET /api/cron/ingest-dorks` — runs `runDorkIngest` inside the app (container DB); host `npm run ingest:dorks` remains for local/dev. |
+| 2026-04-29 | **Ingest radar v2:** Reddit → global `search.json` queries; `signal-filters` (junk URL, problem language, first-person Reddit, buyer score); GitHub title + **min stars**; Twitter user expansion; DB columns `buyer_score`, `priority`, `identity_json`. LinkedIn/Discord not added (no free API / scope). |
 | *(add rows below)* | |
 
 ---

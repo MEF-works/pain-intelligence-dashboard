@@ -99,6 +99,9 @@ export default function Dashboard() {
               ? Number(s.confidenceScore)
               : null,
           actionType: s.actionType != null ? String(s.actionType) : null,
+          buyerScore: Number(s.buyerScore) || 0,
+          priority: s.priority != null && s.priority !== '' ? String(s.priority) : null,
+          identityJson: s.identityJson != null ? String(s.identityJson) : null,
         }));
         setFeedSignals(mapped);
         setStats(tJson);

@@ -1,5 +1,6 @@
 import { createHash } from 'crypto';
 import { eq } from 'drizzle-orm';
+import { REDDIT_SEARCH_QUERIES } from '../../../lib/constants/reddit-search-queries';
 import { FOCUS_AREAS } from '../../../lib/constants/focus-areas';
 import {
   adjustIntensityMonetization,
@@ -9,13 +10,19 @@ import {
 import { plainTextFromHtmlish } from '../html/plain-text';
 import { db } from '../db';
 import { painSignals } from '../db/schema';
+import { qualifySignal, type SignalIdentity } from './signal-filters';
 
 const USER_AGENT = 'PainIntelDashboard/1.0 (local research)';
 
-/** Default X/Twitter recent-search queries (OR groups); override via TWITTER_SEARCH_QUERIES split by |||| */
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** First-person + pain operators on X; override via TWITTER_SEARCH_QUERIES split by |||| */
 const DEFAULT_TWITTER_QUERIES = [
-  '("checkout broken" OR "stripe issues" OR "payment failed") lang:en',
-  '("traffic but no sales" OR "users not signing up" OR "site not converting") lang:en',
+  `("my site is down" OR "my site is broken") lang:en`,
+  `("customers can't checkout" OR "checkout broken" OR "checkout not working") lang:en`,
+  `("lost sales because" OR "losing sales" OR "sales dropped") lang:en`,
+  `("stripe not working" OR "payment failing" OR "paypal not working") lang:en`,
+  `("users not converting" OR "traffic but no sales") lang:en`,
 ];
 
 export function hashContent(text: string): string {
@@ -80,10 +87,26 @@ export async function capturePainSignal(opts: {
   content: string;
   focusAreaId: string;
   createdAt: Date;
+  identity?: Partial<SignalIdentity> & { platform: string };
 }): Promise<{ ok: boolean; hot: boolean }> {
   const fullText = `${opts.title ?? ''}\n\n${opts.content}`.replace(/\n{3,}/g, '\n\n');
   const h = hashContent(fullText);
   if (await hashExists(h)) return { ok: false, hot: false };
+
+  const identityHint = opts.identity ?? { platform: opts.source };
+  const radar = qualifySignal(
+    {
+      source: opts.source,
+      sourceUrl: opts.sourceUrl,
+      title: opts.title,
+      text: opts.content,
+    },
+    identityHint
+  );
+  if (!radar.ok) {
+    console.log(`[ingest/radar] skip ${opts.source} — ${radar.reason}`);
+    return { ok: false, hot: false };
+  }
 
   const baseIntensity = computeSemanticIntensity(fullText);
   const intensity = adjustIntensityMonetization(baseIntensity, fullText);
@@ -120,6 +143,9 @@ export async function capturePainSignal(opts: {
       businessImpact: opp.businessImpact,
       confidenceScore: opp.confidenceScore,
       actionType: opp.actionType,
+      buyerScore: radar.buyerScore,
+      priority: radar.priority,
+      identityJson: JSON.stringify(radar.identity),
     })
     .onConflictDoNothing();
 
@@ -128,47 +154,64 @@ export async function capturePainSignal(opts: {
   return { ok: true, hot };
 }
 
-export async function fetchRedditPain(subreddit: string): Promise<boolean> {
-  const response = await fetch(
-    `https://www.reddit.com/r/${subreddit}/new.json?limit=25`,
-    { headers: { 'User-Agent': USER_AGENT } }
-  );
-  if (!response.ok) {
-    console.warn(`[ingest] r/${subreddit} HTTP ${response.status}`);
-    return false;
-  }
-  let data: {
-    data?: { children?: { data: Record<string, unknown> }[] };
-  };
-  try {
-    data = (await response.json()) as typeof data;
-  } catch {
-    console.warn(`[ingest] r/${subreddit} response was not JSON (blocked HTML/rate limit?)`);
-    return false;
-  }
-  const children = data.data?.children ?? [];
+/** Global Reddit search (not blind subreddit firehose). */
+export async function fetchRedditSearchPain(): Promise<boolean> {
+  const rawQ = process.env.REDDIT_SEARCH_QUERIES?.trim();
+  const queries = rawQ
+    ? rawQ.split('||||').map((s) => s.trim()).filter(Boolean)
+    : [...REDDIT_SEARCH_QUERIES];
+
   let hot = false;
-  for (const { data: post } of children) {
-    const selftext = plainTextFromHtmlish(String(post.selftext ?? ''));
-    const title = plainTextFromHtmlish(String(post.title ?? ''));
-    const fullText = `${title}\n\n${selftext}`.replace(/\n{3,}/g, '\n\n');
-    const area = firstMatchingFocus(fullText);
-    if (!area) continue;
-    const createdUtc = Number(post.created_utc);
-    const id = String(post.name ?? post.id);
-    if (!id) continue;
-    const content = selftext.trim() ? selftext : title;
-    const baseUrl = `https://www.reddit.com${String(post.permalink ?? '')}`;
-    const r = await capturePainSignal({
-      id,
-      source: 'reddit',
-      sourceUrl: baseUrl,
-      title,
-      content,
-      focusAreaId: area.id,
-      createdAt: new Date(createdUtc * 1000),
-    });
-    if (r.hot) hot = true;
+  for (const q of queries) {
+    const url = `https://www.reddit.com/search.json?q=${encodeURIComponent(q)}&sort=new&t=month&limit=25`;
+    const response = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
+    if (!response.ok) {
+      console.warn(`[ingest] Reddit search HTTP ${response.status} for q=${q.slice(0, 40)}…`);
+      await sleep(800);
+      continue;
+    }
+    let data: { data?: { children?: { data: Record<string, unknown> }[] } };
+    try {
+      data = (await response.json()) as typeof data;
+    } catch {
+      console.warn('[ingest] Reddit search response was not JSON');
+      await sleep(800);
+      continue;
+    }
+    const children = (data.data?.children ?? []) as { kind: string; data: Record<string, unknown> }[];
+    for (const child of children) {
+      if (child.kind !== 't3') continue;
+      const post = child.data;
+      const selftext = plainTextFromHtmlish(String(post.selftext ?? ''));
+      const title = plainTextFromHtmlish(String(post.title ?? ''));
+      const fullText = `${title}\n\n${selftext}`.replace(/\n{3,}/g, '\n\n');
+      const area = firstMatchingFocus(fullText);
+      if (!area) continue;
+      const author = String(post.author ?? '').trim();
+      if (!author || author === '[deleted]' || author === 'AutoModerator') continue;
+      const createdUtc = Number(post.created_utc);
+      const id = String(post.name ?? post.id);
+      if (!id) continue;
+      const content = selftext.trim() ? selftext : title;
+      const baseUrl = `https://www.reddit.com${String(post.permalink ?? '')}`;
+      const r = await capturePainSignal({
+        id,
+        source: 'reddit',
+        sourceUrl: baseUrl,
+        title,
+        content,
+        focusAreaId: area.id,
+        createdAt: new Date(createdUtc * 1000),
+        identity: {
+          platform: 'reddit',
+          username: author,
+          profile_url: `https://www.reddit.com/user/${encodeURIComponent(author)}`,
+          possible_business: null,
+        },
+      });
+      if (r.hot) hot = true;
+    }
+    await sleep(900);
   }
   return hot;
 }
@@ -179,6 +222,7 @@ type HnItem = {
   text?: string;
   deleted?: boolean;
   dead?: boolean;
+  by?: string;
 };
 
 export async function fetchHackerNewsPain(): Promise<boolean> {
@@ -206,6 +250,7 @@ export async function fetchHackerNewsPain(): Promise<boolean> {
     if (!area) continue;
     const url = item.url?.trim() || `https://news.ycombinator.com/item?id=${id}`;
     const sid = `hn:${id}`;
+    const by = item.by?.trim() ?? null;
     const r = await capturePainSignal({
       id: sid,
       source: 'hackernews',
@@ -214,6 +259,12 @@ export async function fetchHackerNewsPain(): Promise<boolean> {
       content: body || title,
       focusAreaId: area.id,
       createdAt: new Date(),
+      identity: {
+        platform: 'hackernews',
+        username: by,
+        profile_url: by ? `https://news.ycombinator.com/user?id=${encodeURIComponent(by)}` : null,
+        possible_business: null,
+      },
     });
     if (r.hot) hot = true;
   }
@@ -237,6 +288,8 @@ export async function fetchTwitterPain(): Promise<boolean> {
       query,
       max_results: '10',
       'tweet.fields': 'created_at,author_id',
+      expansions: 'author_id',
+      'user.fields': 'username',
     })}`;
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${token}`, 'User-Agent': USER_AGENT },
@@ -246,8 +299,10 @@ export async function fetchTwitterPain(): Promise<boolean> {
       continue;
     }
     const payload = (await response.json()) as {
-      data?: { id: string; text: string; created_at?: string }[];
+      data?: { id: string; text: string; created_at?: string; author_id?: string }[];
+      includes?: { users?: { id: string; username?: string }[] };
     };
+    const userMap = new Map((payload.includes?.users ?? []).map((u) => [u.id, u]));
     const tweets = payload.data ?? [];
     for (const tw of tweets) {
       const text = plainTextFromHtmlish(tw.text);
@@ -255,6 +310,8 @@ export async function fetchTwitterPain(): Promise<boolean> {
       if (!area) continue;
       const createdAt = tw.created_at ? new Date(tw.created_at) : new Date();
       const link = `https://twitter.com/i/web/status/${tw.id}`;
+      const author = tw.author_id ? userMap.get(tw.author_id) : undefined;
+      const uname = author?.username?.trim() ?? null;
       const r = await capturePainSignal({
         id: `tw:${tw.id}`,
         source: 'twitter',
@@ -263,6 +320,12 @@ export async function fetchTwitterPain(): Promise<boolean> {
         content: text,
         focusAreaId: area.id,
         createdAt,
+        identity: {
+          platform: 'twitter',
+          username: uname,
+          profile_url: uname ? `https://twitter.com/${uname}` : link,
+          possible_business: null,
+        },
       });
       if (r.hot) hot = true;
     }
@@ -276,19 +339,44 @@ type GhIssue = {
   body: string | null;
   repository_url: string;
   number: number;
+  user?: { login: string; html_url?: string };
 };
+
+function githubTitleLooksSevere(title: string): boolean {
+  return /production|broken|checkout|payment|regression|critical|failing|down|not working|outage|sev[0-3]/i.test(
+    title
+  );
+}
 
 export async function fetchGitHubIssuesPain(): Promise<boolean> {
   const q =
     process.env.GITHUB_ISSUES_QUERY?.trim() ||
-    'is:issue is:open label:bug OR label:performance OR label:regression';
-  const url = `https://api.github.com/search/issues?q=${encodeURIComponent(q)}&sort=updated&per_page=15`;
+    'is:issue is:open is:public (label:bug OR label:regression OR label:performance)';
+  const url = `https://api.github.com/search/issues?q=${encodeURIComponent(q)}&sort=updated&per_page=20`;
   const headers: Record<string, string> = {
     Accept: 'application/vnd.github+json',
     'User-Agent': USER_AGENT,
   };
   const ghToken = process.env.GITHUB_TOKEN?.trim();
   if (ghToken) headers.Authorization = `Bearer ${ghToken}`;
+
+  const minStarsRaw = process.env.GITHUB_MIN_STARS?.trim();
+  const minStarsParsed = minStarsRaw === '' || minStarsRaw === undefined ? 5000 : Number.parseInt(minStarsRaw, 10);
+  const minStars = Number.isFinite(minStarsParsed) ? Math.max(0, minStarsParsed) : 5000;
+  const starsCache = new Map<string, number>();
+
+  async function repoStargazers(repo: string): Promise<number> {
+    if (starsCache.has(repo)) return starsCache.get(repo)!;
+    const rr = await fetch(`https://api.github.com/repos/${repo}`, { headers });
+    if (!rr.ok) {
+      starsCache.set(repo, 0);
+      return 0;
+    }
+    const j = (await rr.json()) as { stargazers_count?: number };
+    const n = j.stargazers_count ?? 0;
+    starsCache.set(repo, n);
+    return n;
+  }
 
   const response = await fetch(url, { headers });
   if (!response.ok) {
@@ -300,12 +388,20 @@ export async function fetchGitHubIssuesPain(): Promise<boolean> {
   let hot = false;
   for (const issue of items) {
     const title = plainTextFromHtmlish(issue.title);
+    if (!githubTitleLooksSevere(title)) continue;
     const body = issue.body ? plainTextFromHtmlish(issue.body) : '';
     const fullText = `${title}\n\n${body}`;
     const area = firstMatchingFocus(fullText);
     if (!area) continue;
     const repoMatch = issue.repository_url.match(/\/repos\/([^/]+\/[^/]+)$/);
-    const repo = repoMatch?.[1] ?? 'unknown';
+    const repo = repoMatch?.[1] ?? '';
+    if (!repo) continue;
+    const stars = await repoStargazers(repo);
+    if (minStars > 0 && stars < minStars) {
+      console.log(`[ingest] GitHub skip ${repo}#${issue.number} — stars ${stars} < ${minStars}`);
+      continue;
+    }
+    const login = issue.user?.login?.trim() ?? null;
     const sid = `gh:${repo}:${issue.number}`.slice(0, 200);
     const r = await capturePainSignal({
       id: sid,
@@ -315,6 +411,12 @@ export async function fetchGitHubIssuesPain(): Promise<boolean> {
       content: body.slice(0, 20000) || title,
       focusAreaId: area.id,
       createdAt: new Date(),
+      identity: {
+        platform: 'github_issue',
+        username: login,
+        profile_url: login ? `https://github.com/${login}` : null,
+        possible_business: repo,
+      },
     });
     if (r.hot) hot = true;
   }
@@ -339,31 +441,12 @@ async function ntfyAlert(message: string) {
   }
 }
 
-const DEFAULT_SUBS = [
-  'ecommerce',
-  'shopify',
-  'wordpress',
-  'woocommerce',
-  'elementor',
-  'smallbusiness',
-  'entrepreneur',
-  'startups',
-  'dropshipping',
-  'roastmystore',
-  'saas',
-  'webdev',
-  'uxdesign',
-] as const;
-
 /**
  * Fetches public listings and upserts `pain_signals` (deduplicated by content hash).
  */
 export async function runIngest(): Promise<void> {
   let anyHot = false;
-  for (const sub of DEFAULT_SUBS) {
-    const h = await fetchRedditPain(sub);
-    if (h) anyHot = true;
-  }
+  if (await fetchRedditSearchPain()) anyHot = true;
 
   if (await fetchHackerNewsPain()) anyHot = true;
   if (await fetchTwitterPain()) anyHot = true;

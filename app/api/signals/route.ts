@@ -30,6 +30,9 @@ export async function GET() {
       businessImpact: r.businessImpact ?? null,
       confidenceScore: r.confidenceScore ?? null,
       actionType: r.actionType ?? null,
+      buyerScore: r.buyerScore ?? 0,
+      priority: r.priority ?? null,
+      identityJson: r.identityJson ?? null,
       lastVerifiedAt:
         r.lastVerifiedAt instanceof Date
           ? r.lastVerifiedAt.toISOString()

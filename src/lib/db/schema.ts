@@ -35,6 +35,13 @@ export const painSignals = sqliteTable(
     /** direct_outreach | research_deeper | ignore */
     actionType: text('action_type'),
 
+    /** Radar: operator / first-person + business pain heuristics (0–20). */
+    buyerScore: integer('buyer_score').default(0),
+    /** high | low — from buyer + problem context */
+    priority: text('priority'),
+    /** JSON: { username, profile_url, platform, possible_business } */
+    identityJson: text('identity_json'),
+
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
     lastUpdated: integer('last_updated', { mode: 'timestamp' }),
   },

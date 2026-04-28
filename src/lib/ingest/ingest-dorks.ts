@@ -93,6 +93,13 @@ export async function runDorkIngest(): Promise<number> {
       const idBase = `gdork:${hashContent(url)}`;
       const id = idBase.length > 200 ? idBase.slice(0, 200) : idBase;
 
+      let host: string | null = null;
+      try {
+        host = new URL(url).hostname.replace(/^www\./, '');
+      } catch {
+        host = null;
+      }
+
       const r = await capturePainSignal({
         id,
         source: 'google_dork',
@@ -101,6 +108,12 @@ export async function runDorkIngest(): Promise<number> {
         content,
         focusAreaId: dork.focusAreaId,
         createdAt: new Date(),
+        identity: {
+          platform: 'google_dork',
+          username: null,
+          profile_url: url,
+          possible_business: host,
+        },
       });
       if (r.ok) captured += 1;
     }

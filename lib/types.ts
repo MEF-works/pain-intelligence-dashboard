@@ -22,4 +22,10 @@ export interface FeedSignal {
   confidenceScore: number | null;
   /** direct_outreach | research_deeper | ignore */
   actionType: string | null;
+  /** Radar buyer / first-person heuristics (0–20). */
+  buyerScore: number;
+  /** high | low | null (legacy rows) */
+  priority: string | null;
+  /** JSON string of { username, profile_url, platform, possible_business } */
+  identityJson: string | null;
 }

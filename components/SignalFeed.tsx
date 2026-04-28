@@ -15,6 +15,22 @@ function intensityBadgeClass(intensity: number): string {
   return 'border-zinc-700 bg-zinc-900/80 text-zinc-400';
 }
 
+function identityHint(json: string | null): string | null {
+  if (!json) return null;
+  try {
+    const o = JSON.parse(json) as {
+      username?: string | null;
+      platform?: string;
+      possible_business?: string | null;
+    };
+    if (o.username) return `@${o.username} · ${o.platform ?? ''}`;
+    if (o.possible_business) return o.possible_business;
+    return o.platform ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function keywordsForFocus(focusAreaId: string | null): string[] {
   if (!focusAreaId) return [];
   const area = Object.values(FOCUS_AREAS).find((a) => a.id === focusAreaId);
@@ -194,6 +210,27 @@ export function SignalFeed({
                         <span className="text-[7px] font-mono text-zinc-500 uppercase">
                           {signal.status}
                         </span>
+                        {(signal.priority || signal.buyerScore > 0) && (
+                          <span
+                            className={cn(
+                              'text-[7px] font-mono px-1 py-0.5 rounded border uppercase',
+                              signal.priority === 'high'
+                                ? 'border-amber-500/40 text-amber-300 bg-amber-950/30'
+                                : 'border-zinc-700 text-zinc-500 bg-zinc-900/50'
+                            )}
+                            title="Radar priority / buyer score"
+                          >
+                            {signal.priority ?? '—'} · buyer {signal.buyerScore}
+                          </span>
+                        )}
+                        {identityHint(signal.identityJson) && (
+                          <span
+                            className="text-[7px] font-mono text-sky-400/90 truncate max-w-[140px]"
+                            title={signal.identityJson ?? ''}
+                          >
+                            {identityHint(signal.identityJson)}
+                          </span>
+                        )}
                       </div>
                       {signal.intensity > 85 && (
                         <Zap size={10} className="text-[#FF3E3E] fill-[#FF3E3E] shrink-0" />

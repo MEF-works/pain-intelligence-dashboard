@@ -130,6 +130,12 @@ export function TopActions({ signals }: TopActionsProps) {
                 {s.opportunityAngle || '—'}
               </p>
             </div>
+            {(s.priority || s.buyerScore > 0) && (
+              <p className="text-[8px] font-mono text-zinc-500">
+                Radar: <span className="text-zinc-300">{s.priority ?? '—'}</span> · buyer{' '}
+                <span className="text-zinc-300">{s.buyerScore}</span>
+              </p>
+            )}
             <div className="flex flex-wrap gap-1 pt-1">
               <button
                 type="button"

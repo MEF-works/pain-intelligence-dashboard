@@ -14,7 +14,7 @@ runDorkIngest()
     console.log(`[ingest-dorks] script cwd DB path (for your reference): ${resolvedDb}`);
     console.log(
       '[ingest-dorks] Production Docker: prefer hitting the app so data hits the live volume — ' +
-        '`curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://YOUR_HOST/api/cron/ingest-dorks` ' +
+        '`curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://signal.mgmalkz.com/api/cron/ingest-dorks` ' +
         '(see PROJECT_SOURCE_OF_TRUTH.md §6 / §10).'
     );
     process.exit(0);
