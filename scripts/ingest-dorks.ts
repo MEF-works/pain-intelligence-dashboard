@@ -1,11 +1,14 @@
 import { config as loadEnv } from 'dotenv';
-import { resolve } from 'path';
+import path, { resolve } from 'path';
 import { GOOGLE_DORK_QUERIES } from '../lib/constants/dorks';
 import { capturePainSignal, hashContent } from '../src/lib/ingest/run-ingest';
 
 const root = process.cwd();
 loadEnv({ path: resolve(root, '.env') });
 loadEnv({ path: resolve(root, '.env.local'), override: true });
+
+const rawDb = process.env.DATABASE_PATH?.trim();
+const resolvedDb = rawDb ? path.resolve(rawDb) : path.join(root, 'data', 'pain.db');
 
 type SerperOrganic = { title?: string; link?: string; snippet?: string };
 
@@ -61,6 +64,7 @@ async function serperSearch(q: string): Promise<SerperOrganic[]> {
 }
 
 async function runDorkIngest(): Promise<void> {
+  console.log(`[ingest-dorks] writing SQLite → ${resolvedDb}`);
   let captured = 0;
   for (const dork of GOOGLE_DORK_QUERIES) {
     console.log(`[ingest-dorks] query "${dork.label}" …`);
@@ -102,6 +106,9 @@ async function runDorkIngest(): Promise<void> {
     await new Promise((r) => setTimeout(r, 400));
   }
   console.log(`[ingest-dorks] done — ${captured} new row(s) stored`);
+  console.log(
+    '[ingest-dorks] If the live site runs in Docker (Compose service `pain-intel`), the app reads `/app/data/pain.db` in the container volume — not necessarily this host path. Copy after backup: `docker compose cp ./data/pain.db pain-intel:/app/data/pain.db` then `chown node:node` + restart (see PROJECT_SOURCE_OF_TRUTH.md §10).'
+  );
 }
 
 runDorkIngest()

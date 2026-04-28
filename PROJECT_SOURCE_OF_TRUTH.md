@@ -176,6 +176,16 @@ If any inserted signal has intensity **> 80**, optionally POST to `NTFY_URL`.
 | Persistent SQLite | Named volume **`pain_data`** → `/app/data/pain.db` |
 | Env merge | `env_file: .env` + `environment.DATABASE_PATH=/app/data/pain.db` |
 
+**Host scripts vs. live dashboard DB:** `npm run ingest`, `npm run ingest:dorks`, and `npm run db:purge-job-rss` default to **`./data/pain.db` on the VM filesystem** (unless `DATABASE_PATH` points elsewhere). The Traefik **`pain-intel`** container uses a **different file**: `/app/data/pain.db` on volume **`pain_data`**. Rows ingested on the host will **not** appear on https://signal… until they exist in the container DB. Options:
+
+1. **One-time sync (overwrite container DB with host file)** — backup first, then:
+   ```bash
+   docker compose cp ./data/pain.db pain-intel:/app/data/pain.db
+   docker compose exec -u root pain-intel chown node:node /app/data/pain.db
+   docker compose restart pain-intel
+   ```
+2. **Long-term:** bind-mount host `./data` → `/app/data` in `docker-compose.yml` (replace the named volume for that service) so host scripts and the app always share one `pain.db`.
+
 **First-time / schema:** Run `npm run db:push` on host with `DATABASE_PATH=./data/pain.db`, then seed container volume, e.g.:
 
 ```bash
