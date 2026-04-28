@@ -198,6 +198,13 @@ docker compose up -d pain-intel
 0 5 * * * curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://signal.mgmalkz.com/api/cron/ingest
 ```
 
+**Purge legacy `job_rss` rows (real DB lives in the container):**  
+`npm run db:purge-job-rss` on the **host** uses `./data/pain.db` by default — often **not** the same file as production (volume `pain_data`). If it reports **0 deleted** but the site still shows `job_rss`, delete inside **`pain-intel`** with stdlib Python (`-T` avoids “input device is not a TTY”):
+
+```bash
+docker compose exec -T pain-intel python3 -c "import sqlite3; c=sqlite3.connect('/app/data/pain.db'); n=c.execute('select count(*) from pain_signals where source=?',('job_rss',)).fetchone()[0]; c.execute('delete from pain_signals where source=?',('job_rss',)); c.commit(); c.close(); print('job_rss rows before delete:', n)"
+```
+
 ---
 
 ## 11. NPM scripts
