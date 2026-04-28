@@ -11,9 +11,9 @@ export const runtime = 'nodejs';
  * Requires `SERPER_API_KEY` in the app environment.
  */
 export async function GET(request: Request) {
-  const secret = process.env.CRON_SECRET;
+  const secret = process.env.CRON_SECRET?.trim() ?? '';
   if (secret) {
-    const auth = request.headers.get('authorization');
+    const auth = request.headers.get('authorization')?.trim() ?? '';
     if (auth !== `Bearer ${secret}`) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
