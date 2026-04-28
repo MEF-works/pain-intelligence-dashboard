@@ -24,8 +24,7 @@ ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
 WORKDIR /app
 
-RUN addgroup --system --gid 1001 node && \
-  adduser --system --uid 1001 --ingroup node node
+# Official node:20-bookworm-slim already provides user/group `node` (do not recreate — GID clashes).
 
 COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/.next/static ./.next/static
