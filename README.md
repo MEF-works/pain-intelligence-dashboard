@@ -23,6 +23,9 @@ Sovereign signal intel: SQLite + Drizzle, Reddit + RSS ingest, pipeline stats (s
 
 SQLite in production is the **`pain_data`** Docker volume, path `/app/data/pain.db` in the `pain-intel` service.
 
+After `docker compose cp ./data/pain.db pain-intel:/app/data/pain.db`, fix ownership so the `node` user can write (otherwise ingest/API errors):  
+`docker compose exec -u root pain-intel chown node:node /app/data/pain.db`
+
 **Daily ingest** (no TS runtime in the prod image; call the app API from cron):
 
 `0 5 * * * curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://signal.mgmalkz.com/api/cron/ingest`

@@ -344,9 +344,10 @@ export default function Dashboard() {
               </div>
             )}
             <div className="border-t border-zinc-800 pt-2 text-[9px] text-zinc-600 leading-relaxed">
-              Outreach needs <code className="text-zinc-500">GEMINI_API_KEY</code>. Ingest:{' '}
-              <code className="text-zinc-500">npm run ingest</code> or cron →{' '}
-              <code className="text-zinc-500">/api/cron/ingest</code>.
+              Outreach needs <code className="text-zinc-500">GEMINI_API_KEY</code>. Cron ingest needs{' '}
+              <code className="text-zinc-500">CRON_SECRET</code> +{' '}
+              <code className="text-zinc-500">Authorization: Bearer …</code>. Or host:{' '}
+              <code className="text-zinc-500">npm run ingest</code>.
             </div>
           </div>
         </div>

@@ -96,9 +96,15 @@ export async function fetchRedditPain(subreddit: string): Promise<boolean> {
     console.warn(`[ingest] r/${subreddit} HTTP ${response.status}`);
     return false;
   }
-  const data = (await response.json()) as {
+  let data: {
     data?: { children?: { data: Record<string, unknown> }[] };
   };
+  try {
+    data = (await response.json()) as typeof data;
+  } catch {
+    console.warn(`[ingest] r/${subreddit} response was not JSON (blocked HTML/rate limit?)`);
+    return false;
+  }
   const children = data.data?.children ?? [];
   let hot = false;
   for (const { data: post } of children) {
