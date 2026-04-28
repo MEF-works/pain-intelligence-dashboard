@@ -111,8 +111,9 @@ All under `/api/*`. Dashboard uses JSON.
 | GET | `/api/stats` | None | Aggregates + **`highValueLeads`** (count where `intensity > 85`) |
 | POST | `/api/outreach` | None | Body `{ "id": "<signal id>" }` → Gemini bridge text |
 | GET | `/api/cron/ingest` | Optional Bearer | Runs full ingest (`runIngest`). `maxDuration` 60s. |
+| GET | `/api/cron/ingest-dorks` | Optional Bearer | Serper → `google_dork` rows (`runDorkIngest`). Same DB as dashboard — **use this in Docker** instead of host `npm run ingest:dorks`. `maxDuration` 120s. Requires **`SERPER_API_KEY`**. |
 
-**Security note:** Lock down `/api/cron/ingest` with `CRON_SECRET` in production.
+**Security note:** Lock down `/api/cron/ingest` and `/api/cron/ingest-dorks` with `CRON_SECRET` in production.
 
 ---
 
@@ -125,7 +126,7 @@ Entry: `runIngest()` in `src/lib/ingest/run-ingest.ts` (also invoked by `GET /ap
 | Source | `source` value | Notes |
 |--------|----------------|--------|
 | Reddit | `reddit` | `/r/{sub}/new.json?limit=25`; subs include **saas**, **webdev**, **uxdesign**, plus ecommerce/shopify/**wordpress**, **woocommerce**, **elementor**/smallbusiness/entrepreneur/startups/dropshipping/roastmystore |
-| Serper (scripts) | `google_dork` | **`npm run ingest:dorks`** — queries in `lib/constants/dorks.ts`; requires **`SERPER_API_KEY`** |
+| Serper | `google_dork` | Queries in `lib/constants/dorks.ts`; requires **`SERPER_API_KEY`**. Prefer **`GET /api/cron/ingest-dorks`** in production (writes container SQLite). Host: **`npm run ingest:dorks`** (writes host `DATABASE_PATH` / `./data/pain.db`). |
 | Hacker News | `hackernews` | Firebase `newstories` + item JSON; link or `item?id=` |
 | X / Twitter | `twitter` | Requires `TWITTER_BEARER_TOKEN`; recent search (default queries OR override env) |
 | GitHub issues | `github_issue` | GitHub Search API; optional `GITHUB_TOKEN` |
@@ -206,6 +207,7 @@ docker compose up -d pain-intel
 
 ```cron
 0 5 * * * curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://signal.mgmalkz.com/api/cron/ingest
+30 5 * * * curl -fsS -H "Authorization: Bearer $CRON_SECRET" https://signal.mgmalkz.com/api/cron/ingest-dorks
 ```
 
 **Purge legacy `job_rss` rows (real DB lives in the container):**  
@@ -265,6 +267,7 @@ Append dated entries when shipping meaningful changes:
 |------|---------|
 | 2026-04-28 | Action Engine columns; monetization intensity; multi-source ingest (HN, optional Twitter/GitHub); Top Actions UI; actionable filter; outreach uses structured fields; optional RSS disable via `JOB_RSS_ENABLED`. |
 | 2026-04-29 | Removed job-board RSS ingest entirely; `npm run db:purge-job-rss` deletes legacy `job_rss` rows; Serper dork ingest documented. |
+| 2026-04-29 | `GET /api/cron/ingest-dorks` — runs `runDorkIngest` inside the app (container DB); host `npm run ingest:dorks` remains for local/dev. |
 | *(add rows below)* | |
 
 ---
