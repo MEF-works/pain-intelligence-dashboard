@@ -12,6 +12,7 @@ import { painSignals } from '../db/schema';
 
 const USER_AGENT = 'PainIntelDashboard/1.0 (local research)';
 
+/** Remote OK / job-board RSS — off by default (hiring posts ≠ operator swoop opportunities). Set JOB_RSS_ENABLED=true to enable. */
 const JOB_RSS_URL =
   process.env.JOB_RSS_URL ?? 'https://remoteok.com/remote-jobs.rss';
 
@@ -415,10 +416,10 @@ export async function runIngest(): Promise<void> {
     if (h) anyHot = true;
   }
 
-  if (process.env.JOB_RSS_ENABLED !== 'false') {
+  if (process.env.JOB_RSS_ENABLED === 'true') {
     if (await fetchJobRss()) anyHot = true;
   } else {
-    console.log('[ingest] JOB_RSS_ENABLED=false, skipping job RSS');
+    console.log('[ingest] Job RSS skipped (set JOB_RSS_ENABLED=true to ingest JOB_RSS_URL)');
   }
 
   if (await fetchHackerNewsPain()) anyHot = true;

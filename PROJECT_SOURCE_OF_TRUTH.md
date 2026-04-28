@@ -85,8 +85,8 @@ Copy from `.env.example`. Production Compose **overrides** `DATABASE_PATH` for t
 | `GEMINI_API_KEY` | For outreach | Used by `POST /api/outreach` / `generateTargetedBridge` |
 | `DATABASE_PATH` | Recommended | Host/scripts: default `./data/pain.db`. **Container:** forced to `/app/data/pain.db` in `docker-compose.yml` |
 | `CRON_SECRET` | Strongly recommended in prod | If set, `GET /api/cron/ingest` requires `Authorization: Bearer <same value>` |
-| `JOB_RSS_URL` | Optional | Default Remote OK RSS in `run-ingest.ts` |
-| `JOB_RSS_ENABLED` | Optional | Set `false` to skip Remote OK RSS only |
+| `JOB_RSS_URL` | Optional | Only used when job RSS is enabled (see below). Default URL is Remote OK in code. |
+| `JOB_RSS_ENABLED` | Optional | **`true`** enables job-board RSS ingest; **default / omitted = off** (operator swoop use case, not hiring feeds). |
 | `TWITTER_BEARER_TOKEN` | Optional | Enables X/Twitter recent search ingest |
 | `TWITTER_SEARCH_QUERIES` | Optional | Queries separated by `\|\|\|\|` (four pipes). Defaults in `run-ingest.ts` |
 | `GITHUB_TOKEN` | Optional | Higher GitHub Search API rate limits for issue ingest |
@@ -126,7 +126,7 @@ Entry: `runIngest()` in `src/lib/ingest/run-ingest.ts` (also invoked by `GET /ap
 | Source | `source` value | Notes |
 |--------|----------------|--------|
 | Reddit | `reddit` | `/r/{sub}/new.json?limit=25`; subs include **saas**, **webdev**, **uxdesign**, plus ecommerce/shopify/wordpress/smallbusiness/entrepreneur/startups/dropshipping/roastmystore |
-| Remote OK RSS | `job_rss` | Skipped when `JOB_RSS_ENABLED=false` |
+| Remote OK RSS | `job_rss` | Only when **`JOB_RSS_ENABLED=true`** (default: skipped) |
 | Hacker News | `hackernews` | Firebase `newstories` + item JSON; link or `item?id=` |
 | X / Twitter | `twitter` | Requires `TWITTER_BEARER_TOKEN`; recent search (default queries OR override env) |
 | GitHub issues | `github_issue` | GitHub Search API; optional `GITHUB_TOKEN` |
