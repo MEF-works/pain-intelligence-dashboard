@@ -1,5 +1,11 @@
+import { config as loadEnv } from 'dotenv';
+import { resolve } from 'path';
 import { GOOGLE_DORK_QUERIES } from '../lib/constants/dorks';
 import { capturePainSignal, hashContent } from '../src/lib/ingest/run-ingest';
+
+const root = process.cwd();
+loadEnv({ path: resolve(root, '.env') });
+loadEnv({ path: resolve(root, '.env.local'), override: true });
 
 type SerperOrganic = { title?: string; link?: string; snippet?: string };
 
