@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 export const painSignals = sqliteTable(
   'pain_signals',
@@ -23,6 +23,16 @@ export const painSignals = sqliteTable(
 
     /** Last time scrutinize verified sourceUrl (proof-of-life) */
     lastVerifiedAt: integer('last_verified_at', { mode: 'timestamp' }),
+
+    /** Action Engine — structured opportunity (ingest or heuristic) */
+    painSummary: text('pain_summary'),
+    likelyRootIssue: text('likely_root_issue'),
+    opportunityAngle: text('opportunity_angle'),
+    businessImpact: text('business_impact'),
+    /** 0–1 */
+    confidenceScore: real('confidence_score'),
+    /** direct_outreach | research_deeper | ignore */
+    actionType: text('action_type'),
 
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
     lastUpdated: integer('last_updated', { mode: 'timestamp' }),

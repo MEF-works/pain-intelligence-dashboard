@@ -6,6 +6,7 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 import { FOCUS_AREAS } from '@/lib/constants/focus-areas';
 import type { FeedSignal } from '@/lib/types';
 import { SignalFeed } from '@/components/SignalFeed';
+import { TopActions } from '@/components/TopActions';
 import { StatCard } from '@/components/StatCard';
 import { cn, downloadSignalsCsv } from '@/lib/utils';
 import {
@@ -36,6 +37,7 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = React.useState('');
   const [selectedFocusAreas, setSelectedFocusAreas] = React.useState<string[]>([]);
   const [hideDead, setHideDead] = React.useState(true);
+  const [actionableOnly, setActionableOnly] = React.useState(false);
   const [feedSignals, setFeedSignals] = React.useState<FeedSignal[]>([]);
   const [stats, setStats] = React.useState<StatsPayload | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -87,6 +89,15 @@ export default function Dashboard() {
             s.lastVerifiedAt != null && s.lastVerifiedAt !== ''
               ? String(s.lastVerifiedAt)
               : null,
+          painSummary: s.painSummary != null ? String(s.painSummary) : null,
+          likelyRootIssue: s.likelyRootIssue != null ? String(s.likelyRootIssue) : null,
+          opportunityAngle: s.opportunityAngle != null ? String(s.opportunityAngle) : null,
+          businessImpact: s.businessImpact != null ? String(s.businessImpact) : null,
+          confidenceScore:
+            s.confidenceScore != null && s.confidenceScore !== ''
+              ? Number(s.confidenceScore)
+              : null,
+          actionType: s.actionType != null ? String(s.actionType) : null,
         }));
         setFeedSignals(mapped);
         setStats(tJson);
@@ -105,6 +116,11 @@ export default function Dashboard() {
   const filteredSignals = React.useMemo(() => {
     return feedSignals.filter((signal) => {
       if (hideDead && signal.status === 'dead') return false;
+      if (actionableOnly) {
+        const conf = signal.confidenceScore ?? 0;
+        const at = signal.actionType ?? '';
+        if (!(conf > 0.7 && at === 'direct_outreach')) return false;
+      }
       const hay = `${signal.text} ${signal.title ?? ''}`.toLowerCase();
       const q = searchQuery === '' || hay.includes(searchQuery.toLowerCase());
       const f =
@@ -112,7 +128,11 @@ export default function Dashboard() {
         (signal.focusArea != null && selectedFocusAreas.includes(signal.focusArea));
       return q && f;
     });
-  }, [feedSignals, searchQuery, selectedFocusAreas, hideDead]);
+  }, [feedSignals, searchQuery, selectedFocusAreas, hideDead, actionableOnly]);
+
+  const killShotSignals = React.useMemo(() => {
+    return feedSignals.filter((s) => !(hideDead && s.status === 'dead'));
+  }, [feedSignals, hideDead]);
 
   const toggleFocus = (id: string) => {
     setSelectedFocusAreas((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
@@ -147,6 +167,17 @@ export default function Dashboard() {
             >
               <EyeOff size={12} />
               {hideDead ? 'Hiding dead' : 'Show dead'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActionableOnly((v) => !v)}
+              className={cn(
+                'px-2 py-1 text-[10px] font-mono border rounded flex items-center gap-1',
+                actionableOnly ? 'bg-[#FF3E99]/25 border-[#FF3E99]/50 text-[#FF3E99]' : 'bg-zinc-900 border-zinc-700 text-zinc-500'
+              )}
+              title="confidence &gt; 0.7 and action_type = direct_outreach"
+            >
+              Actionable only
             </button>
             <button
               type="button"
@@ -212,6 +243,7 @@ export default function Dashboard() {
             onClick={() => {
               setSearchQuery('');
               setSelectedFocusAreas([]);
+              setActionableOnly(false);
             }}
             className="p-1.5 text-zinc-600 hover:text-white"
             aria-label="Reset filters"
@@ -224,6 +256,8 @@ export default function Dashboard() {
       {err && <p className="text-red-400 text-sm font-mono mb-2">{err}</p>}
 
       <div className="max-w-[1800px] mx-auto space-y-6 relative z-10">
+        <TopActions signals={killShotSignals} />
+
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-4">
           <div className="space-y-4">
             <h2 className="text-[11px] font-mono uppercase text-zinc-500 flex items-center gap-2">

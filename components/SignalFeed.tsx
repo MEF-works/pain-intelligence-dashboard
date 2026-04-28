@@ -174,6 +174,11 @@ export function SignalFeed({ signals, onRefetch, isRefreshing }: SignalFeedProps
                       )}
                     </div>
 
+                    {signal.painSummary && (
+                      <p className="text-[10px] font-mono text-zinc-300 mb-2 leading-snug border-l-2 border-[#FF3E3E]/40 pl-2">
+                        {signal.painSummary}
+                      </p>
+                    )}
                     <p className="text-[11px] leading-snug text-zinc-300 font-sans mb-3 line-clamp-6">
                       {signal.text.split(/\s+/).map((word, i) => {
                         const hit = kws.some((kw) => word.toLowerCase().includes(kw.toLowerCase()));

@@ -7,12 +7,40 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function downloadSignalsCsv(rows: FeedSignal[]) {
-  const header = ['id', 'source', 'sourceUrl', 'title', 'text', 'focusArea', 'intensity', 'status', 'createdAt']
+  const header = [
+    'id',
+    'source',
+    'sourceUrl',
+    'title',
+    'text',
+    'focusArea',
+    'intensity',
+    'status',
+    'painSummary',
+    'opportunityAngle',
+    'confidenceScore',
+    'actionType',
+    'createdAt',
+  ]
   const esc = (s: string) => `"${String(s).replace(/"/g, '""')}"`
   const lines = [header.join(',')]
   for (const r of rows) {
     lines.push(
-      [r.id, r.source, r.sourceUrl, r.title ?? '', r.text, r.focusArea ?? '', String(r.intensity), r.status, r.timestamp]
+      [
+        r.id,
+        r.source,
+        r.sourceUrl,
+        r.title ?? '',
+        r.text,
+        r.focusArea ?? '',
+        String(r.intensity),
+        r.status,
+        r.painSummary ?? '',
+        r.opportunityAngle ?? '',
+        r.confidenceScore != null ? String(r.confidenceScore) : '',
+        r.actionType ?? '',
+        r.timestamp,
+      ]
         .map(esc)
         .join(',')
     )

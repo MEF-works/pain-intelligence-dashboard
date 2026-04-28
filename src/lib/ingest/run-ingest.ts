@@ -1,6 +1,11 @@
 import { createHash } from 'crypto';
 import { eq } from 'drizzle-orm';
 import { FOCUS_AREAS } from '../../../lib/constants/focus-areas';
+import {
+  adjustIntensityMonetization,
+  buildOpportunityFields,
+  shouldDiscardSignal,
+} from '../action-engine/opportunity';
 import { plainTextFromHtmlish } from '../html/plain-text';
 import { db } from '../db';
 import { painSignals } from '../db/schema';
@@ -9,6 +14,12 @@ const USER_AGENT = 'PainIntelDashboard/1.0 (local research)';
 
 const JOB_RSS_URL =
   process.env.JOB_RSS_URL ?? 'https://remoteok.com/remote-jobs.rss';
+
+/** Default X/Twitter recent-search queries (OR groups); override via TWITTER_SEARCH_QUERIES split by |||| */
+const DEFAULT_TWITTER_QUERIES = [
+  '("checkout broken" OR "stripe issues" OR "payment failed") lang:en',
+  '("traffic but no sales" OR "users not signing up" OR "site not converting") lang:en',
+];
 
 export function hashContent(text: string): string {
   const n = text.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -63,6 +74,62 @@ async function hashExists(hash: string): Promise<boolean> {
   return Boolean(row);
 }
 
+async function capturePainSignal(opts: {
+  id: string;
+  source: string;
+  sourceUrl: string;
+  title: string | null;
+  content: string;
+  focusAreaId: string;
+  createdAt: Date;
+}): Promise<{ ok: boolean; hot: boolean }> {
+  const fullText = `${opts.title ?? ''}\n\n${opts.content}`.replace(/\n{3,}/g, '\n\n');
+  const h = hashContent(fullText);
+  if (await hashExists(h)) return { ok: false, hot: false };
+
+  const baseIntensity = computeSemanticIntensity(fullText);
+  const intensity = adjustIntensityMonetization(baseIntensity, fullText);
+
+  const opp = await buildOpportunityFields({
+    title: opts.title,
+    content: opts.content,
+    focusAreaId: opts.focusAreaId,
+    intensity,
+    source: opts.source,
+  });
+
+  if (shouldDiscardSignal(opp)) {
+    console.log(`[ingest] discard low-signal noise ${opts.source} ${opts.id}`);
+    return { ok: false, hot: false };
+  }
+
+  await db
+    .insert(painSignals)
+    .values({
+      id: opts.id,
+      source: opts.source,
+      sourceUrl: opts.sourceUrl,
+      title: opts.title,
+      content: opts.content.slice(0, 20000),
+      contentHash: h,
+      focusArea: opts.focusAreaId,
+      intensity,
+      status: 'new',
+      createdAt: opts.createdAt,
+      painSummary: opp.painSummary,
+      likelyRootIssue: opp.likelyRootIssue,
+      opportunityAngle: opp.opportunityAngle,
+      businessImpact: opp.businessImpact,
+      confidenceScore: opp.confidenceScore,
+      actionType: opp.actionType,
+    })
+    .onConflictDoNothing();
+
+  const hot = intensity > 80;
+  console.log(`[SIGNAL CAPTURED] ${opts.source}/${opts.focusAreaId} — ${String(opts.title).slice(0, 80)}`);
+  return { ok: true, hot };
+}
+
 /** Minimal RSS 2.0 item parse (no extra deps). */
 function parseRssItems(xml: string): { title: string; link: string; content: string }[] {
   const out: { title: string; link: string; content: string }[] = [];
@@ -111,27 +178,17 @@ export async function fetchRedditPain(subreddit: string): Promise<boolean> {
     const id = String(post.name ?? post.id);
     if (!id) continue;
     const content = selftext.trim() ? selftext : title;
-    const h = hashContent(`${title}\n\n${content}`);
-    if (await hashExists(h)) continue;
     const baseUrl = `https://www.reddit.com${String(post.permalink ?? '')}`;
-    const intensity = computeSemanticIntensity(fullText);
-    if (intensity > 80) hot = true;
-    await db
-      .insert(painSignals)
-      .values({
-        id,
-        source: 'reddit',
-        sourceUrl: baseUrl,
-        title,
-        content,
-        contentHash: h,
-        focusArea: area.id,
-        intensity,
-        status: 'new',
-        createdAt: new Date(createdUtc * 1000),
-      })
-      .onConflictDoNothing();
-    console.log(`[SIGNAL CAPTURED] reddit/${area.id} — ${title.slice(0, 80)}`);
+    const r = await capturePainSignal({
+      id,
+      source: 'reddit',
+      sourceUrl: baseUrl,
+      title,
+      content,
+      focusAreaId: area.id,
+      createdAt: new Date(createdUtc * 1000),
+    });
+    if (r.hot) hot = true;
   }
   return hot;
 }
@@ -153,27 +210,165 @@ export async function fetchJobRss(): Promise<boolean> {
     const fullText = it.content;
     const area = firstMatchingFocus(fullText);
     if (!area) continue;
-    const h = hashContent(fullText);
-    if (await hashExists(h)) continue;
     const id = `rss:${hashContent(it.link)}`.slice(0, 200);
-    const intensity = computeSemanticIntensity(fullText);
-    if (intensity > 80) hot = true;
-    await db
-      .insert(painSignals)
-      .values({
-        id,
-        source: 'job_rss',
-        sourceUrl: it.link,
-        title: it.title,
-        content: fullText.slice(0, 20000),
-        contentHash: h,
-        focusArea: area.id,
-        intensity,
-        status: 'new',
-        createdAt: new Date(),
-      })
-      .onConflictDoNothing();
-    console.log(`[SIGNAL CAPTURED] job_rss/${area.id} — ${it.title.slice(0, 80)}`);
+    const r = await capturePainSignal({
+      id,
+      source: 'job_rss',
+      sourceUrl: it.link,
+      title: it.title,
+      content: fullText.slice(0, 20000),
+      focusAreaId: area.id,
+      createdAt: new Date(),
+    });
+    if (r.hot) hot = true;
+  }
+  return hot;
+}
+
+type HnItem = {
+  title?: string;
+  url?: string;
+  text?: string;
+  deleted?: boolean;
+  dead?: boolean;
+};
+
+export async function fetchHackerNewsPain(): Promise<boolean> {
+  const res = await fetch('https://hacker-news.firebaseio.com/v0/newstories.json', {
+    headers: { 'User-Agent': USER_AGENT },
+  });
+  if (!res.ok) {
+    console.warn(`[ingest] HN list HTTP ${res.status}`);
+    return false;
+  }
+  const ids = (await res.json()) as number[];
+  const slice = ids.slice(0, 80);
+  let hot = false;
+  for (const id of slice) {
+    const ir = await fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`, {
+      headers: { 'User-Agent': USER_AGENT },
+    });
+    if (!ir.ok) continue;
+    const item = (await ir.json()) as HnItem;
+    if (!item?.title || item.deleted || item.dead) continue;
+    const title = plainTextFromHtmlish(item.title);
+    const body = item.text ? plainTextFromHtmlish(item.text) : '';
+    const fullText = `${title}\n\n${body}`.trim();
+    const area = firstMatchingFocus(fullText);
+    if (!area) continue;
+    const url = item.url?.trim() || `https://news.ycombinator.com/item?id=${id}`;
+    const sid = `hn:${id}`;
+    const r = await capturePainSignal({
+      id: sid,
+      source: 'hackernews',
+      sourceUrl: url,
+      title,
+      content: body || title,
+      focusAreaId: area.id,
+      createdAt: new Date(),
+    });
+    if (r.hot) hot = true;
+  }
+  return hot;
+}
+
+export async function fetchTwitterPain(): Promise<boolean> {
+  const token = process.env.TWITTER_BEARER_TOKEN?.trim();
+  if (!token) {
+    console.log('[ingest] TWITTER_BEARER_TOKEN unset, skipping X/Twitter');
+    return false;
+  }
+  const rawQ = process.env.TWITTER_SEARCH_QUERIES?.trim();
+  const queries = rawQ
+    ? rawQ.split('||||').map((s) => s.trim()).filter(Boolean)
+    : DEFAULT_TWITTER_QUERIES;
+
+  let hot = false;
+  for (const query of queries) {
+    const url = `https://api.twitter.com/2/tweets/search/recent?${new URLSearchParams({
+      query,
+      max_results: '10',
+      'tweet.fields': 'created_at,author_id',
+    })}`;
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}`, 'User-Agent': USER_AGENT },
+    });
+    if (!response.ok) {
+      console.warn(`[ingest] Twitter HTTP ${response.status}`);
+      continue;
+    }
+    const payload = (await response.json()) as {
+      data?: { id: string; text: string; created_at?: string }[];
+    };
+    const tweets = payload.data ?? [];
+    for (const tw of tweets) {
+      const text = plainTextFromHtmlish(tw.text);
+      const area = firstMatchingFocus(text);
+      if (!area) continue;
+      const createdAt = tw.created_at ? new Date(tw.created_at) : new Date();
+      const link = `https://twitter.com/i/web/status/${tw.id}`;
+      const r = await capturePainSignal({
+        id: `tw:${tw.id}`,
+        source: 'twitter',
+        sourceUrl: link,
+        title: text.slice(0, 300),
+        content: text,
+        focusAreaId: area.id,
+        createdAt,
+      });
+      if (r.hot) hot = true;
+    }
+  }
+  return hot;
+}
+
+type GhIssue = {
+  html_url: string;
+  title: string;
+  body: string | null;
+  repository_url: string;
+  number: number;
+};
+
+export async function fetchGitHubIssuesPain(): Promise<boolean> {
+  const q =
+    process.env.GITHUB_ISSUES_QUERY?.trim() ||
+    'is:issue is:open label:bug OR label:performance OR label:regression';
+  const url = `https://api.github.com/search/issues?q=${encodeURIComponent(q)}&sort=updated&per_page=15`;
+  const headers: Record<string, string> = {
+    Accept: 'application/vnd.github+json',
+    'User-Agent': USER_AGENT,
+  };
+  const ghToken = process.env.GITHUB_TOKEN?.trim();
+  if (ghToken) headers.Authorization = `Bearer ${ghToken}`;
+
+  const response = await fetch(url, { headers });
+  if (!response.ok) {
+    console.warn(`[ingest] GitHub search HTTP ${response.status}`);
+    return false;
+  }
+  const payload = (await response.json()) as { items?: GhIssue[] };
+  const items = payload.items ?? [];
+  let hot = false;
+  for (const issue of items) {
+    const title = plainTextFromHtmlish(issue.title);
+    const body = issue.body ? plainTextFromHtmlish(issue.body) : '';
+    const fullText = `${title}\n\n${body}`;
+    const area = firstMatchingFocus(fullText);
+    if (!area) continue;
+    const repoMatch = issue.repository_url.match(/\/repos\/([^/]+\/[^/]+)$/);
+    const repo = repoMatch?.[1] ?? 'unknown';
+    const sid = `gh:${repo}:${issue.number}`.slice(0, 200);
+    const r = await capturePainSignal({
+      id: sid,
+      source: 'github_issue',
+      sourceUrl: issue.html_url,
+      title,
+      content: body.slice(0, 20000) || title,
+      focusAreaId: area.id,
+      createdAt: new Date(),
+    });
+    if (r.hot) hot = true;
   }
   return hot;
 }
@@ -205,6 +400,9 @@ const DEFAULT_SUBS = [
   'startups',
   'dropshipping',
   'roastmystore',
+  'saas',
+  'webdev',
+  'uxdesign',
 ] as const;
 
 /**
@@ -216,7 +414,16 @@ export async function runIngest(): Promise<void> {
     const h = await fetchRedditPain(sub);
     if (h) anyHot = true;
   }
-  if (await fetchJobRss()) anyHot = true;
+
+  if (process.env.JOB_RSS_ENABLED !== 'false') {
+    if (await fetchJobRss()) anyHot = true;
+  } else {
+    console.log('[ingest] JOB_RSS_ENABLED=false, skipping job RSS');
+  }
+
+  if (await fetchHackerNewsPain()) anyHot = true;
+  if (await fetchTwitterPain()) anyHot = true;
+  if (await fetchGitHubIssuesPain()) anyHot = true;
 
   if (anyHot) {
     const copy = 'Pain Intel: at least one signal scored intensity > 80 in this run.';

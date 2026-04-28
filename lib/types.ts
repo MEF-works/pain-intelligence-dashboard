@@ -14,4 +14,12 @@ export interface FeedSignal {
   status: string;
   /** ISO time of last scrutinize proof-of-life check */
   lastVerifiedAt: string | null;
+  /** Action Engine (may be null for legacy rows) */
+  painSummary: string | null;
+  likelyRootIssue: string | null;
+  opportunityAngle: string | null;
+  businessImpact: string | null;
+  confidenceScore: number | null;
+  /** direct_outreach | research_deeper | ignore */
+  actionType: string | null;
 }

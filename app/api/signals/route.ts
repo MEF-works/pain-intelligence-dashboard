@@ -24,6 +24,12 @@ export async function GET() {
       status: r.status,
       rawBudget: r.rawBudget,
       auditLog: r.auditLog ?? null,
+      painSummary: r.painSummary ?? null,
+      likelyRootIssue: r.likelyRootIssue ?? null,
+      opportunityAngle: r.opportunityAngle ?? null,
+      businessImpact: r.businessImpact ?? null,
+      confidenceScore: r.confidenceScore ?? null,
+      actionType: r.actionType ?? null,
       lastVerifiedAt:
         r.lastVerifiedAt instanceof Date
           ? r.lastVerifiedAt.toISOString()

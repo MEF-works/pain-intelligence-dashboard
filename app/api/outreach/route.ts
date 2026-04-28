@@ -18,6 +18,9 @@ export async function POST(request: Request) {
   const text = await generateTargetedBridge({
     content: row.content,
     focusArea: row.focusArea,
+    painSummary: row.painSummary ?? null,
+    opportunityAngle: row.opportunityAngle ?? null,
+    businessImpact: row.businessImpact ?? null,
   });
   return Response.json({ text });
 }
