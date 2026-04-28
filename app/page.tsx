@@ -38,6 +38,7 @@ export default function Dashboard() {
   const [selectedFocusAreas, setSelectedFocusAreas] = React.useState<string[]>([]);
   const [hideDead, setHideDead] = React.useState(true);
   const [actionableOnly, setActionableOnly] = React.useState(false);
+  const [dorkingOnly, setDorkingOnly] = React.useState(false);
   const [feedSignals, setFeedSignals] = React.useState<FeedSignal[]>([]);
   const [stats, setStats] = React.useState<StatsPayload | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -121,6 +122,7 @@ export default function Dashboard() {
         const at = signal.actionType ?? '';
         if (!(conf > 0.7 && at === 'direct_outreach')) return false;
       }
+      if (dorkingOnly && signal.source !== 'google_dork') return false;
       const hay = `${signal.text} ${signal.title ?? ''}`.toLowerCase();
       const q = searchQuery === '' || hay.includes(searchQuery.toLowerCase());
       const f =
@@ -128,7 +130,7 @@ export default function Dashboard() {
         (signal.focusArea != null && selectedFocusAreas.includes(signal.focusArea));
       return q && f;
     });
-  }, [feedSignals, searchQuery, selectedFocusAreas, hideDead, actionableOnly]);
+  }, [feedSignals, searchQuery, selectedFocusAreas, hideDead, actionableOnly, dorkingOnly]);
 
   const killShotSignals = React.useMemo(() => {
     return feedSignals.filter((s) => !(hideDead && s.status === 'dead'));
@@ -244,6 +246,7 @@ export default function Dashboard() {
               setSearchQuery('');
               setSelectedFocusAreas([]);
               setActionableOnly(false);
+              setDorkingOnly(false);
             }}
             className="p-1.5 text-zinc-600 hover:text-white"
             aria-label="Reset filters"
@@ -391,7 +394,13 @@ export default function Dashboard() {
           initial={{ opacity: 0.9 }}
           animate={{ opacity: 1 }}
         >
-          <SignalFeed signals={filteredSignals} onRefetch={refetch} isRefreshing={loading} />
+          <SignalFeed
+            signals={filteredSignals}
+            onRefetch={refetch}
+            isRefreshing={loading}
+            dorkingOnly={dorkingOnly}
+            onDorkingOnlyChange={setDorkingOnly}
+          />
         </motion.div>
       </div>
 

@@ -11,6 +11,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "ingest": "tsx scripts/ingest-signals.ts",
+    "ingest:dorks": "tsx scripts/ingest-dorks.ts",
     "scrutinize": "tsx scripts/scrutinize.ts"
   },
   "dependencies": {

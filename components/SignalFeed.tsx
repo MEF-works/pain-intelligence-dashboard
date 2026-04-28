@@ -26,9 +26,18 @@ interface SignalFeedProps {
   onRefetch: () => void;
   /** Parent is re-fetching signals/stats from the API */
   isRefreshing?: boolean;
+  /** When true, parent filters to `source === 'google_dork'` only */
+  dorkingOnly?: boolean;
+  onDorkingOnlyChange?: (next: boolean) => void;
 }
 
-export function SignalFeed({ signals, onRefetch, isRefreshing }: SignalFeedProps) {
+export function SignalFeed({
+  signals,
+  onRefetch,
+  isRefreshing,
+  dorkingOnly = false,
+  onDorkingOnlyChange,
+}: SignalFeedProps) {
   const [outreachFor, setOutreachFor] = React.useState<string | null>(null);
   const [outreachText, setOutreachText] = React.useState('');
   const [outreachLoading, setOutreachLoading] = React.useState(false);
@@ -82,11 +91,26 @@ export function SignalFeed({ signals, onRefetch, isRefreshing }: SignalFeedProps
   return (
     <>
       <div className="glass-panel rounded-lg overflow-hidden flex flex-col min-h-[480px] max-h-[min(80vh,900px)]">
-        <div className="p-3 border-b border-zinc-800 flex justify-between items-center bg-transparent">
+        <div className="p-3 border-b border-zinc-800 flex justify-between items-center bg-transparent gap-2 flex-wrap">
           <h2 className="text-[11px] font-mono uppercase text-zinc-300 tracking-widest leading-none">
             Live signals (pain_signals)
           </h2>
-          <div className="flex items-center gap-2">
+          {onDorkingOnlyChange && (
+            <button
+              type="button"
+              onClick={() => onDorkingOnlyChange(!dorkingOnly)}
+              className={cn(
+                'px-2 py-0.5 text-[8px] font-mono uppercase border rounded shrink-0',
+                dorkingOnly
+                  ? 'bg-violet-500/25 border-violet-500/50 text-violet-300'
+                  : 'bg-zinc-900 border-zinc-700 text-zinc-500 hover:border-zinc-600'
+              )}
+              title="Show only Serper/google_dork leads"
+            >
+              Dorking
+            </button>
+          )}
+          <div className="flex items-center gap-2 ml-auto">
             {isRefreshing ? (
               <span className="text-[9px] font-mono text-zinc-500 flex items-center gap-1">
                 <Loader2 size={12} className="animate-spin" />
@@ -146,7 +170,9 @@ export function SignalFeed({ signals, onRefetch, isRefreshing }: SignalFeedProps
                               ? 'text-orange-500 border-orange-500/20 bg-orange-500/5'
                               : signal.source === 'job_rss'
                                 ? 'text-cyan-500 border-cyan-500/20 bg-cyan-500/5'
-                                : 'text-zinc-500 border-zinc-500/20'
+                                : signal.source === 'google_dork'
+                                  ? 'text-violet-400 border-violet-500/25 bg-violet-500/10'
+                                  : 'text-zinc-500 border-zinc-500/20'
                           )}
                         >
                           {signal.source.replace('_', ' ')}

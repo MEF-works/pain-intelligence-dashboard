@@ -125,7 +125,7 @@ Entry: `runIngest()` in `src/lib/ingest/run-ingest.ts` (also invoked by `GET /ap
 
 | Source | `source` value | Notes |
 |--------|----------------|--------|
-| Reddit | `reddit` | `/r/{sub}/new.json?limit=25`; subs include **saas**, **webdev**, **uxdesign**, plus ecommerce/shopify/wordpress/smallbusiness/entrepreneur/startups/dropshipping/roastmystore |
+| Reddit | `reddit` | `/r/{sub}/new.json?limit=25`; subs include **saas**, **webdev**, **uxdesign**, plus ecommerce/shopify/**wordpress**, **woocommerce**, **elementor**/smallbusiness/entrepreneur/startups/dropshipping/roastmystore |
 | Remote OK RSS | `job_rss` | Only when **`JOB_RSS_ENABLED=true`** (default: skipped) |
 | Hacker News | `hackernews` | Firebase `newstories` + item JSON; link or `item?id=` |
 | X / Twitter | `twitter` | Requires `TWITTER_BEARER_TOKEN`; recent search (default queries OR override env) |
@@ -234,7 +234,7 @@ docker compose up -d pain-intel
 |--------|--------|
 | **Schema** (`schema.ts`) | `npm run db:push` on each environment; restart app; document breaking changes here |
 | **Focus keywords** (`focus-areas.ts`) | Redeploy/rebuild; **existing rows unchanged** — new ingest picks up new rules |
-| **Reddit sub list** (`DEFAULT_SUBS`) | Same as above |
+| **Reddit sub list** (`DEFAULT_SUBS`) | ecommerce, shopify, wordpress, **woocommerce**, **elementor**, smallbusiness, entrepreneur, startups, dropshipping, roastmystore, saas, webdev, uxdesign |
 | **Env vars** | Update `.env.example` + this doc; restart containers |
 | **Docker hostname** | Edit Traefik labels in `docker-compose.yml` + DNS |
 | **API contract** | Update §6 and any consumer (dashboard fetch shapes) |

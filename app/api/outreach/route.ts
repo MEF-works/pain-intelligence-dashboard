@@ -21,6 +21,8 @@ export async function POST(request: Request) {
     painSummary: row.painSummary ?? null,
     opportunityAngle: row.opportunityAngle ?? null,
     businessImpact: row.businessImpact ?? null,
+    source: row.source,
+    title: row.title,
   });
   return Response.json({ text });
 }

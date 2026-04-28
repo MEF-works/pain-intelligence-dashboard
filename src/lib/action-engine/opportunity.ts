@@ -152,7 +152,10 @@ export function deriveOpportunityHeuristic(input: {
     ANGLE_BY_FOCUS[input.focusAreaId] ??
     'Offer a scoped diagnostic → remediation plan with measurable business outcomes.';
 
-  const conf = heuristicConfidence(blob, input.focusAreaId, input.intensity);
+  let conf = heuristicConfidence(blob, input.focusAreaId, input.intensity);
+  if (input.source === 'google_dork') {
+    conf = clamp01(conf + 0.18);
+  }
   const action_type = classifyAction(conf, input.intensity, blob);
 
   return {

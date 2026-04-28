@@ -75,7 +75,8 @@ async function hashExists(hash: string): Promise<boolean> {
   return Boolean(row);
 }
 
-async function capturePainSignal(opts: {
+/** Upserts one row when `content_hash` is new; skips duplicates (SHA-256 of normalized title+body). */
+export async function capturePainSignal(opts: {
   id: string;
   source: string;
   sourceUrl: string;
@@ -396,6 +397,8 @@ const DEFAULT_SUBS = [
   'ecommerce',
   'shopify',
   'wordpress',
+  'woocommerce',
+  'elementor',
   'smallbusiness',
   'entrepreneur',
   'startups',
